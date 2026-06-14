@@ -1525,23 +1525,45 @@ function App() {
                   }
                   if (field.multiSelect) {
                     const selected = Array.isArray(row[field.key]) ? row[field.key] : [];
+                    const dropdownId = `inspection-department-${row.id}`;
+                    const isOpen = openFilter === dropdownId;
+                    const buttonText = selected.length === 0
+                      ? '选择事业部'
+                      : selected.length === 1
+                        ? selected[0]
+                        : `已选${selected.length}项`;
+                    const toggleDepartment = (option) => {
+                      const nextSelected = selected.includes(option)
+                        ? selected.filter((item) => item !== option)
+                        : [...selected, option];
+                      updateInspectionNoticeRow(row.id, field.key, nextSelected);
+                    };
                     return (
-                      <div className="inline-checkbox-group">
-                        {INSPECTION_DEPARTMENT_OPTIONS.map((option) => (
-                          <label key={option}>
-                            <input
-                              type="checkbox"
-                              checked={selected.includes(option)}
-                              onChange={(event) => {
-                                const nextSelected = event.target.checked
-                                  ? [...selected, option]
-                                  : selected.filter((item) => item !== option);
-                                updateInspectionNoticeRow(row.id, field.key, nextSelected);
-                              }}
-                            />
-                            {option}
-                          </label>
-                        ))}
+                      <div className="inspection-department-select multi-filter">
+                        <button
+                          type="button"
+                          className="inspection-department-button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setOpenFilter(isOpen ? '' : dropdownId);
+                          }}
+                        >
+                          {buttonText}
+                        </button>
+                        {isOpen && (
+                          <div className="inspection-department-menu" onClick={(event) => event.stopPropagation()}>
+                            {INSPECTION_DEPARTMENT_OPTIONS.map((option) => (
+                              <label key={option}>
+                                <input
+                                  type="checkbox"
+                                  checked={selected.includes(option)}
+                                  onChange={() => toggleDepartment(option)}
+                                />
+                                {option}
+                              </label>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     );
                   }

@@ -520,6 +520,57 @@ h3 {
   accent-color: #2563eb;
 }
 
+.inspection-department-select {
+  position: relative;
+  min-width: 150px;
+}
+
+.inspection-department-button {
+  width: 150px;
+  height: 34px;
+  padding: 0 10px;
+  text-align: left;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.inspection-department-menu {
+  position: absolute;
+  top: 38px;
+  left: 0;
+  z-index: 160;
+  width: 190px;
+  padding: 6px;
+  border: 1px solid #dbe3ee;
+  border-radius: 8px;
+  background: white;
+  box-shadow: 0 16px 38px rgba(15, 23, 42, 0.16);
+}
+
+.inspection-department-menu label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 7px 8px;
+  border-radius: 6px;
+  color: #1f2937;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.inspection-department-menu label:hover {
+  background: #eef6ff;
+}
+
+.inspection-department-menu input {
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  accent-color: #2563eb;
+}
+
 .single-management-panel {
   display: grid;
   gap: 14px;
