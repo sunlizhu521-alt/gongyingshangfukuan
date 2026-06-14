@@ -565,15 +565,22 @@ function App() {
     <main className="app-shell">
       <aside className="sidebar">
         <h1>供应链AI系统</h1>
-        <button className={activeTab === 'ledger' ? 'active' : ''} onClick={() => setActiveTab('ledger')}>供应商付款看板</button>
-        <button className={activeTab === 'upload' ? 'active' : ''} onClick={() => setActiveTab('upload')}>发票上传</button>
-        {canManageInvoiceInventory && (
-          <button className={activeTab === 'invoiceInventory' ? 'active' : ''} onClick={() => setActiveTab('invoiceInventory')}>发票信息库存查看</button>
-        )}
-        {isAdmin && (
-          <button className={activeTab === 'suppliers' ? 'active' : ''} onClick={() => setActiveTab('suppliers')}>供应商管理维度表</button>
-        )}
-        <button className={activeTab === 'reminders' ? 'active' : ''} onClick={() => setActiveTab('reminders')}>操作日志</button>
+        <nav className="sidebar-menu" aria-label="系统菜单">
+          <div className="menu-group">
+            <div className="menu-group-title">供应商付款提醒</div>
+            <div className="submenu-list">
+              <button className={activeTab === 'ledger' ? 'active' : ''} onClick={() => setActiveTab('ledger')}>供应商付款看板</button>
+              <button className={activeTab === 'upload' ? 'active' : ''} onClick={() => setActiveTab('upload')}>发票上传</button>
+              {canManageInvoiceInventory && (
+                <button className={activeTab === 'invoiceInventory' ? 'active' : ''} onClick={() => setActiveTab('invoiceInventory')}>发票信息库存查看</button>
+              )}
+              {isAdmin && (
+                <button className={activeTab === 'suppliers' ? 'active' : ''} onClick={() => setActiveTab('suppliers')}>供应商管理维度表</button>
+              )}
+              <button className={activeTab === 'reminders' ? 'active' : ''} onClick={() => setActiveTab('reminders')}>操作日志</button>
+            </div>
+          </div>
+        </nav>
         <div className="user-box">
           <strong>{user.name}</strong>
           <span>{user.role}</span>

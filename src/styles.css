@@ -91,10 +91,40 @@ select {
   font-size: 22px;
 }
 
+.sidebar-menu {
+  display: grid;
+  gap: 8px;
+}
+
+.menu-group {
+  display: grid;
+  gap: 6px;
+}
+
+.menu-group-title {
+  padding: 9px 10px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.08);
+  color: #f8fafc;
+  font-weight: 600;
+}
+
+.submenu-list {
+  display: grid;
+  gap: 4px;
+  padding-left: 12px;
+  border-left: 1px solid rgba(148,164,184,0.34);
+}
+
 .sidebar button {
   text-align: left;
   background: transparent;
   color: #cbd5e1;
+}
+
+.submenu-list button {
+  padding: 8px 10px;
+  font-size: 14px;
 }
 
 .sidebar button.active,
