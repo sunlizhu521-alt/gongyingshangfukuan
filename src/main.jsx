@@ -15,7 +15,8 @@ const INSPECTION_NOTICE_FIELDS = [
   { key: 'supplierAddress', label: '供应商地址', readonly: true },
   { key: 'businessDepartments', label: '事业部', multiSelect: true },
   { key: 'operation', label: '运营' },
-  { key: 'firstInspection', label: '是否首批验货' },
+  { key: 'firstInspection', label: '是否首批验货', select: true, options: ['是', '否'], placeholder: '选择' },
+  { key: 'salesProductLine', label: '销售产品线' },
   { key: 'series', label: '系列' },
   { key: 'totalQuantity', label: '合计数量' },
   { key: 'skuQuantity', label: 'SKU及数量', multiline: true },
@@ -1567,18 +1568,21 @@ function App() {
                       </div>
                     );
                   }
-                  if (field.select && field.key === 'supplierShortName') {
-                    const hasCurrentValue = row[field.key] && !inspectionSupplierShortNameOptions.some((option) => option.value === row[field.key]);
+                  if (field.select) {
+                    const baseOptions = field.key === 'supplierShortName'
+                      ? inspectionSupplierShortNameOptions
+                      : (field.options || []).map((option) => ({ value: option, label: option }));
+                    const hasCurrentValue = row[field.key] && !baseOptions.some((option) => option.value === row[field.key]);
                     const options = hasCurrentValue
-                      ? [{ value: row[field.key], label: row[field.key] }, ...inspectionSupplierShortNameOptions]
-                      : inspectionSupplierShortNameOptions;
+                      ? [{ value: row[field.key], label: row[field.key] }, ...baseOptions]
+                      : baseOptions;
                     return (
                       <select
                         className="table-input inspection-notice-input"
                         value={row[field.key] || ''}
                         onChange={(event) => updateInspectionNoticeRow(row.id, field.key, event.target.value)}
                       >
-                        <option value="">选择供应商</option>
+                        <option value="">{field.placeholder || (field.key === 'supplierShortName' ? '选择供应商' : '选择')}</option>
                         {options.map((option) => (
                           <option key={option.value} value={option.value}>{option.label}</option>
                         ))}
