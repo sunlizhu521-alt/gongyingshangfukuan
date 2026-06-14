@@ -545,7 +545,7 @@ function App() {
     return (
       <main className="login-shell">
         <form className="login-panel" onSubmit={login}>
-          <h1>供应商发票付款提醒系统</h1>
+          <h1>供应链AI系统</h1>
           <label>
             账号
             <input value={loginName} onChange={(event) => setLoginName(event.target.value)} />
@@ -564,7 +564,7 @@ function App() {
   return (
     <main className="app-shell">
       <aside className="sidebar">
-        <h1>供应商付款提醒</h1>
+        <h1>供应链AI系统</h1>
         <button className={activeTab === 'ledger' ? 'active' : ''} onClick={() => setActiveTab('ledger')}>供应商付款看板</button>
         <button className={activeTab === 'upload' ? 'active' : ''} onClick={() => setActiveTab('upload')}>发票上传</button>
         {canManageInvoiceInventory && (
