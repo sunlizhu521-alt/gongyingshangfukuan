@@ -57,7 +57,9 @@ function App() {
         { value: 'qualityInspection.inspectionNotice', tab: 'inspectionNotice', label: '验货通知' },
         { value: 'qualityInspection.inspectionSchedule', tab: 'inspectionSchedule', label: '验货安排' },
         { value: 'qualityInspection.inspectionFeedback', tab: 'inspectionFeedback', label: '验货反馈' },
-        { value: 'qualityInspection.inspectionReportQuery', tab: 'inspectionReportQuery', label: '检验报告单查询' }
+        { value: 'qualityInspection.inspectionReportQuery', tab: 'inspectionReportQuery', label: '检验报告单查询' },
+        { value: 'qualityInspection.inspectionSummary', tab: 'inspectionSummary', label: '验货信息汇总表' },
+        { value: 'qualityInspection.inspectionInitialData', tab: 'inspectionInitialData', label: '验货信息初始数据' }
       ]
     },
     {
@@ -82,6 +84,8 @@ function App() {
     'qualityInspection.inspectionSchedule': ['qualityInspection'],
     'qualityInspection.inspectionFeedback': ['qualityInspection'],
     'qualityInspection.inspectionReportQuery': ['qualityInspection'],
+    'qualityInspection.inspectionSummary': ['qualityInspection'],
+    'qualityInspection.inspectionInitialData': ['qualityInspection'],
     'systemManagement.permissionManagement': ['permissionManagement']
   };
   function hasPermission(permission) {
@@ -110,7 +114,9 @@ function App() {
     inspectionNotice: '验货通知',
     inspectionSchedule: '验货安排',
     inspectionFeedback: '验货反馈',
-    inspectionReportQuery: '检验报告单查询'
+    inspectionReportQuery: '检验报告单查询',
+    inspectionSummary: '验货信息汇总表',
+    inspectionInitialData: '验货信息初始数据'
   };
 
   function openMenuTab(tab, group) {
@@ -803,6 +809,12 @@ function App() {
                 )}
                 {canAccessTab('inspectionReportQuery') && (
                   <button className={activeTab === 'inspectionReportQuery' ? 'active' : ''} onClick={() => openMenuTab('inspectionReportQuery', 'qualityInspection')}>检验报告单查询</button>
+                )}
+                {canAccessTab('inspectionSummary') && (
+                  <button className={activeTab === 'inspectionSummary' ? 'active' : ''} onClick={() => openMenuTab('inspectionSummary', 'qualityInspection')}>验货信息汇总表</button>
+                )}
+                {canAccessTab('inspectionInitialData') && (
+                  <button className={activeTab === 'inspectionInitialData' ? 'active' : ''} onClick={() => openMenuTab('inspectionInitialData', 'qualityInspection')}>验货信息初始数据</button>
                 )}
               </div>
             )}

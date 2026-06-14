@@ -42,7 +42,9 @@ const PERMISSION_GROUPS = [
       'qualityInspection.inspectionNotice',
       'qualityInspection.inspectionSchedule',
       'qualityInspection.inspectionFeedback',
-      'qualityInspection.inspectionReportQuery'
+      'qualityInspection.inspectionReportQuery',
+      'qualityInspection.inspectionSummary',
+      'qualityInspection.inspectionInitialData'
     ]
   },
   {
