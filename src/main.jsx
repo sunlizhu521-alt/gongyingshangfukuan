@@ -101,6 +101,11 @@ function App() {
       ]
     },
     {
+      value: 'salesInventory',
+      label: '销售及库存看板',
+      children: []
+    },
+    {
       value: 'systemManagement',
       label: '系统管理',
       fixedOwnerOnly: true,
@@ -149,6 +154,7 @@ function App() {
   const canManageInvoiceInventory = canAccessTab('invoiceInventory');
   const canManageSuppliers = canAccessTab('suppliers');
   const canAccessQualityInspection = canAccessGroup('qualityInspection');
+  const canAccessSalesInventory = canAccessGroup('salesInventory');
   const qualityInspectionPages = {
     inspectionNotice: '验货通知',
     inspectionSchedule: '验货安排',
@@ -235,7 +241,7 @@ function App() {
     if (user && !canManagePermissions && activeTab === 'permissionManagement') {
       openFirstAllowedTab();
     }
-  }, [activeTab, canAccessQualityInspection, canAccessSupplierPayment, canManageInvoiceInventory, canManagePermissions, canManageSuppliers, user]);
+  }, [activeTab, canAccessQualityInspection, canAccessSalesInventory, canAccessSupplierPayment, canManageInvoiceInventory, canManagePermissions, canManageSuppliers, user]);
 
   useEffect(() => {
     function closeFilters() {
@@ -856,7 +862,9 @@ function App() {
     if (target.name === systemOwnerName || group.fixedOwnerOnly) return;
     const permissions = managedPermissionSet(target);
     const children = group.children.map((item) => item.value);
-    const allChecked = children.every((item) => permissions.has(item));
+    const allChecked = children.length
+      ? children.every((item) => permissions.has(item))
+      : permissions.has(group.value);
     if (allChecked) {
       permissions.delete(group.value);
       children.forEach((item) => permissions.delete(item));
@@ -991,6 +999,19 @@ function App() {
                 )}
               </div>
             )}
+          </div>
+          )}
+          {canAccessSalesInventory && (
+          <div className="menu-group">
+            <button
+              type="button"
+              className={`menu-group-toggle ${activeMenuGroup === 'salesInventory' ? 'active' : ''}`}
+              onClick={() => setActiveMenuGroup('salesInventory')}
+              aria-expanded={activeMenuGroup === 'salesInventory'}
+            >
+              销售及库存看板
+              <span>{activeMenuGroup === 'salesInventory' ? '▾' : '▸'}</span>
+            </button>
           </div>
           )}
           {canManagePermissions && (
@@ -1415,7 +1436,11 @@ function App() {
                   {permissionGroups.map((group) => {
                     const groupDisabled = row.name === systemOwnerName || group.fixedOwnerOnly;
                     const childValues = group.children.map((item) => item.value);
-                    const groupChecked = row.name === systemOwnerName || childValues.every((item) => isManagedPermissionChecked(row, item));
+                    const groupChecked = row.name === systemOwnerName || (
+                      childValues.length
+                        ? childValues.every((item) => isManagedPermissionChecked(row, item))
+                        : isManagedPermissionChecked(row, group.value)
+                    );
                     return (
                       <div className="permission-group-block" key={group.value}>
                         <label className="permission-group-label">

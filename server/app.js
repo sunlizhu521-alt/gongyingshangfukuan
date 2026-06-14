@@ -49,6 +49,10 @@ const PERMISSION_GROUPS = [
     ]
   },
   {
+    value: 'salesInventory',
+    children: []
+  },
+  {
     value: 'systemManagement',
     children: ['systemManagement.permissionManagement']
   }
