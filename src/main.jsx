@@ -28,6 +28,7 @@ function App() {
   const [paymentWeekFilter, setPaymentWeekFilter] = useState([]);
   const [paymentMonthFilter, setPaymentMonthFilter] = useState([]);
   const [openFilter, setOpenFilter] = useState('');
+  const [activeMenuGroup, setActiveMenuGroup] = useState('supplierPayment');
   const [supplierImportResult, setSupplierImportResult] = useState(null);
   const [ownerImportResult, setOwnerImportResult] = useState(null);
   const [dimensionShortNameFilter, setDimensionShortNameFilter] = useState([]);
@@ -42,6 +43,11 @@ function App() {
     inspectionFeedback: '验货反馈',
     inspectionReportQuery: '检验报告单查询'
   };
+
+  function openMenuTab(tab, group) {
+    setActiveMenuGroup(group);
+    setActiveTab(tab);
+  }
 
   async function loadData() {
     const params = user ? `?user=${encodeURIComponent(user.name)}&role=${encodeURIComponent(user.role)}` : '';
@@ -71,9 +77,11 @@ function App() {
 
   useEffect(() => {
     if (user && !isAdmin && activeTab === 'suppliers') {
+      setActiveMenuGroup('supplierPayment');
       setActiveTab('ledger');
     }
     if (user && !canManageInvoiceInventory && activeTab === 'invoiceInventory') {
+      setActiveMenuGroup('supplierPayment');
       setActiveTab('ledger');
     }
   }, [activeTab, canManageInvoiceInventory, isAdmin, user]);
@@ -573,27 +581,47 @@ function App() {
         <h1>供应链AI系统</h1>
         <nav className="sidebar-menu" aria-label="系统菜单">
           <div className="menu-group">
-            <div className="menu-group-title">供应商付款提醒</div>
-            <div className="submenu-list">
-              <button className={activeTab === 'ledger' ? 'active' : ''} onClick={() => setActiveTab('ledger')}>供应商付款看板</button>
-              <button className={activeTab === 'upload' ? 'active' : ''} onClick={() => setActiveTab('upload')}>发票上传</button>
-              {canManageInvoiceInventory && (
-                <button className={activeTab === 'invoiceInventory' ? 'active' : ''} onClick={() => setActiveTab('invoiceInventory')}>发票信息库存查看</button>
-              )}
-              {isAdmin && (
-                <button className={activeTab === 'suppliers' ? 'active' : ''} onClick={() => setActiveTab('suppliers')}>供应商管理维度表</button>
-              )}
-              <button className={activeTab === 'reminders' ? 'active' : ''} onClick={() => setActiveTab('reminders')}>操作日志</button>
-            </div>
+            <button
+              type="button"
+              className={`menu-group-toggle ${activeMenuGroup === 'supplierPayment' ? 'active' : ''}`}
+              onClick={() => setActiveMenuGroup('supplierPayment')}
+              aria-expanded={activeMenuGroup === 'supplierPayment'}
+            >
+              供应商付款提醒
+              <span>{activeMenuGroup === 'supplierPayment' ? '▾' : '▸'}</span>
+            </button>
+            {activeMenuGroup === 'supplierPayment' && (
+              <div className="submenu-list">
+                <button className={activeTab === 'ledger' ? 'active' : ''} onClick={() => openMenuTab('ledger', 'supplierPayment')}>供应商付款看板</button>
+                <button className={activeTab === 'upload' ? 'active' : ''} onClick={() => openMenuTab('upload', 'supplierPayment')}>发票上传</button>
+                {canManageInvoiceInventory && (
+                  <button className={activeTab === 'invoiceInventory' ? 'active' : ''} onClick={() => openMenuTab('invoiceInventory', 'supplierPayment')}>发票信息库存查看</button>
+                )}
+                {isAdmin && (
+                  <button className={activeTab === 'suppliers' ? 'active' : ''} onClick={() => openMenuTab('suppliers', 'supplierPayment')}>供应商管理维度表</button>
+                )}
+                <button className={activeTab === 'reminders' ? 'active' : ''} onClick={() => openMenuTab('reminders', 'supplierPayment')}>操作日志</button>
+              </div>
+            )}
           </div>
           <div className="menu-group">
-            <div className="menu-group-title">品质验货</div>
-            <div className="submenu-list">
-              <button className={activeTab === 'inspectionNotice' ? 'active' : ''} onClick={() => setActiveTab('inspectionNotice')}>验货通知</button>
-              <button className={activeTab === 'inspectionSchedule' ? 'active' : ''} onClick={() => setActiveTab('inspectionSchedule')}>验货安排</button>
-              <button className={activeTab === 'inspectionFeedback' ? 'active' : ''} onClick={() => setActiveTab('inspectionFeedback')}>验货反馈</button>
-              <button className={activeTab === 'inspectionReportQuery' ? 'active' : ''} onClick={() => setActiveTab('inspectionReportQuery')}>检验报告单查询</button>
-            </div>
+            <button
+              type="button"
+              className={`menu-group-toggle ${activeMenuGroup === 'qualityInspection' ? 'active' : ''}`}
+              onClick={() => setActiveMenuGroup('qualityInspection')}
+              aria-expanded={activeMenuGroup === 'qualityInspection'}
+            >
+              品质验货
+              <span>{activeMenuGroup === 'qualityInspection' ? '▾' : '▸'}</span>
+            </button>
+            {activeMenuGroup === 'qualityInspection' && (
+              <div className="submenu-list">
+                <button className={activeTab === 'inspectionNotice' ? 'active' : ''} onClick={() => openMenuTab('inspectionNotice', 'qualityInspection')}>验货通知</button>
+                <button className={activeTab === 'inspectionSchedule' ? 'active' : ''} onClick={() => openMenuTab('inspectionSchedule', 'qualityInspection')}>验货安排</button>
+                <button className={activeTab === 'inspectionFeedback' ? 'active' : ''} onClick={() => openMenuTab('inspectionFeedback', 'qualityInspection')}>验货反馈</button>
+                <button className={activeTab === 'inspectionReportQuery' ? 'active' : ''} onClick={() => openMenuTab('inspectionReportQuery', 'qualityInspection')}>检验报告单查询</button>
+              </div>
+            )}
           </div>
         </nav>
         <div className="user-box">

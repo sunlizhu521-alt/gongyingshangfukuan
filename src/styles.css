@@ -101,12 +101,29 @@ select {
   gap: 6px;
 }
 
-.menu-group-title {
+.menu-group-title,
+.menu-group-toggle {
   padding: 9px 10px;
   border-radius: 6px;
   background: rgba(255,255,255,0.08);
   color: #f8fafc;
   font-weight: 600;
+}
+
+.menu-group-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.menu-group-toggle.active {
+  background: rgba(37,99,235,0.24);
+  color: white;
+}
+
+.menu-group-toggle span {
+  color: #cbd5e1;
 }
 
 .submenu-list {
@@ -131,6 +148,16 @@ select {
 .sidebar button:hover {
   background: #24324d;
   color: white;
+}
+
+.submenu-list button.active {
+  background: #2563eb;
+  color: white;
+  box-shadow: inset 3px 0 0 #93c5fd;
+}
+
+.submenu-list button.active:hover {
+  background: #1d4ed8;
 }
 
 .user-box {
