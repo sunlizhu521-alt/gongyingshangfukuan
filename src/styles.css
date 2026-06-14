@@ -458,6 +458,10 @@ h3 {
   max-height: 520px;
 }
 
+.inspection-initial-table th {
+  white-space: nowrap;
+}
+
 .single-management-panel {
   display: grid;
   gap: 14px;
