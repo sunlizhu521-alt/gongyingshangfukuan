@@ -1556,7 +1556,7 @@ function App() {
                         value={row[field.key] || ''}
                         onChange={(event) => updateInspectionNoticeRow(row.id, field.key, event.target.value)}
                       >
-                        <option value="">请选择供应商简称</option>
+                        <option value="">选择供应商</option>
                         {options.map((option) => (
                           <option key={option.value} value={option.value}>{option.label}</option>
                         ))}
