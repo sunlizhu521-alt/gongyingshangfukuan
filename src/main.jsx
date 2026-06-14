@@ -170,6 +170,10 @@ function App() {
     setActiveTab(tab);
   }
 
+  function toggleMenuGroup(group) {
+    setActiveMenuGroup((currentGroup) => currentGroup === group ? '' : group);
+  }
+
   async function loadData() {
     const params = user ? `?user=${encodeURIComponent(user.name)}&role=${encodeURIComponent(user.role)}` : '';
     const [invoiceRes, draftRes, supplierRes, ownerRes, reminderRes, settingsRes, usersRes, inspectionInitialRes, inspectionNoticeRes] = await Promise.all([
@@ -936,7 +940,7 @@ function App() {
             <button
               type="button"
               className={`menu-group-toggle ${activeMenuGroup === 'supplierPayment' ? 'active' : ''}`}
-              onClick={() => setActiveMenuGroup('supplierPayment')}
+              onClick={() => toggleMenuGroup('supplierPayment')}
               aria-expanded={activeMenuGroup === 'supplierPayment'}
             >
               供应商付款提醒
@@ -968,7 +972,7 @@ function App() {
             <button
               type="button"
               className={`menu-group-toggle ${activeMenuGroup === 'qualityInspection' ? 'active' : ''}`}
-              onClick={() => setActiveMenuGroup('qualityInspection')}
+              onClick={() => toggleMenuGroup('qualityInspection')}
               aria-expanded={activeMenuGroup === 'qualityInspection'}
             >
               品质验货
@@ -1006,7 +1010,7 @@ function App() {
             <button
               type="button"
               className={`menu-group-toggle ${activeMenuGroup === 'salesInventory' ? 'active' : ''}`}
-              onClick={() => setActiveMenuGroup('salesInventory')}
+              onClick={() => toggleMenuGroup('salesInventory')}
               aria-expanded={activeMenuGroup === 'salesInventory'}
             >
               销售及库存看板
@@ -1019,7 +1023,7 @@ function App() {
             <button
               type="button"
               className={`menu-group-toggle ${activeMenuGroup === 'systemManagement' ? 'active' : ''}`}
-              onClick={() => setActiveMenuGroup('systemManagement')}
+              onClick={() => toggleMenuGroup('systemManagement')}
               aria-expanded={activeMenuGroup === 'systemManagement'}
             >
               系统管理
