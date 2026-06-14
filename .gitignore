@@ -1,6 +1,8 @@
 node_modules/
 dist/
 data/
+!public/kcfx/data/
+!public/kcfx/data/**
 
 .env
 .env.*

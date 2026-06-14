@@ -1728,10 +1728,22 @@ function App() {
         )}
 
         {salesInventoryPageMap[activeTab] && canAccessTab(activeTab) && (
-          <section className="placeholder-panel">
-            <h2>{salesInventoryPageMap[activeTab].label}</h2>
-            <p>已作为销售及库存看板三级菜单添加，原库存分析看板项目内容保持不变。</p>
-            <p>来源页面：{salesInventoryPageMap[activeTab].sourceFile}</p>
+          <section className="embedded-dashboard-panel">
+            <div className="embedded-dashboard-header">
+              <h2>{salesInventoryPageMap[activeTab].label}</h2>
+              <a
+                className="ghost embedded-dashboard-link"
+                href={`/kcfx/${salesInventoryPageMap[activeTab].sourceFile}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                新窗口打开
+              </a>
+            </div>
+            <iframe
+              title={salesInventoryPageMap[activeTab].label}
+              src={`/kcfx/${salesInventoryPageMap[activeTab].sourceFile}`}
+            />
           </section>
         )}
       </section>

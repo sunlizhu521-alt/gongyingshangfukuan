@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>库存分析看板 报错信息提示</title>
+  <link rel="stylesheet" href="styles.css?v=20260612h">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <strong>库存分析看板</strong>
+        <span>供应链维护更新</span>
+      </div>
+      <nav class="nav">
+        <a href="receipt-summary.html">供应链库存分析</a>
+        <a href="sales-analysis.html">销售数据分析</a>
+        <a href="comparison.html">表格对比分析</a>
+        <a href="fact-library.html">库存数据文件</a>
+        <a href="sales-library.html">销售数据文件</a>
+        <a href="file-library.html">维度表文件库</a>
+        <a class="active" href="errors.html">报错信息提示</a>
+      </nav>
+    </aside>
+
+    <main class="content">
+      <header class="topbar">
+        <div>
+          <h1>报错信息提示</h1>
+          <p>分别根据关账后库存事实表、库存分析月份表、销售数据文件检查核心维表是否缺失映射。</p>
+        </div>
+        <div class="status-pill" id="checkStatus">正在读取文件库...</div>
+      </header>
+
+      <section class="toolbar">
+        <button id="refreshBtn" type="button">应用刷新</button>
+        <button id="downloadAllBtn" class="secondary" type="button">一键下载</button>
+      </section>
+
+      <section class="error-source-panel">
+      <section class="error-source-title">
+        <h2>根据关账后库存事实表</h2>
+        <p>数量取关账后库存事实表有库存的物料和仓库。</p>
+      </section>
+
+      <section class="metrics error-metrics">
+        <div class="metric-card"><span>有库存物料数</span><strong id="closedStockMaterialCount">0</strong></div>
+        <div class="metric-card"><span>商品分类缺失</span><strong id="closedProductMissingCount">0</strong></div>
+        <div class="metric-card"><span>事业部对照缺失</span><strong id="closedDivisionMissingCount">0</strong></div>
+        <div class="metric-card"><span>仓库对照缺失</span><strong id="closedWarehouseMissingCount">0</strong></div>
+        <div class="metric-card"><span>结算价缺失</span><strong id="closedSettlementMissingCount">0</strong></div>
+      </section>
+
+      <section class="error-section">
+        <div class="table-title-row">
+          <div class="table-title">有库存商品维度表没有信息</div>
+          <button class="secondary compact-button" type="button" data-download-error="closed.productMissing">下载</button>
+        </div>
+        <div class="diagnostic-panel show">
+          <span>来源：关账后库存事实表，按物料编码汇总有库存数量。</span>
+          <span>比对：商品分类维表 A列物料编码。</span>
+          <span>缺失提示：事实表有库存物料编码在商品分类维表没有信息。</span>
+          <span>需要维护：维度表文件库的商品分类维表。</span>
+        </div>
+        <div class="table-panel">
+          <table>
+            <thead>
+              <tr>
+                <th>物料编码</th>
+                <th>SKU</th>
+                <th>物料名称</th>
+                <th>数量</th>
+              </tr>
+            </thead>
+            <tbody id="closedProductMissingRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="error-section">
+        <div class="table-title-row">
+          <div class="table-title">有库存仓库物料事业部对照表没有信息</div>
+          <button class="secondary compact-button" type="button" data-download-error="closed.divisionMissing">下载</button>
+        </div>
+        <div class="diagnostic-panel show">
+          <span>来源：关账后库存事实表，按有库存物料编码汇总数量。</span>
+          <span>比对：仓库物料事业部对照表 C列物料编码。</span>
+          <span>缺失提示：事实表有库存物料编码在仓库物料事业部对照表没有信息。</span>
+          <span>需要维护：维度表文件库的仓库物料事业部对照表。</span>
+        </div>
+        <div class="table-panel">
+          <table>
+            <thead>
+              <tr>
+                <th>物料编码</th>
+                <th>SKU</th>
+                <th>物料名称</th>
+                <th>数量</th>
+              </tr>
+            </thead>
+            <tbody id="closedDivisionMissingRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="error-section">
+        <div class="table-title-row">
+          <div class="table-title">有库存仓库、金蝶、旺店通、领星没有信息</div>
+          <button class="secondary compact-button" type="button" data-download-error="closed.warehouseMissing">下载</button>
+        </div>
+        <div class="diagnostic-panel show">
+          <span>来源：关账后库存事实表，按有库存仓库汇总数量。</span>
+          <span>比对：仓库、金蝶、旺店通、领星 B列仓库金蝶名称。</span>
+          <span>缺失提示：事实表有库存仓库在仓库维表没有信息。</span>
+          <span>需要维护：维度表文件库的仓库、金蝶、旺店通、领星。</span>
+        </div>
+        <div class="table-panel">
+          <table>
+            <thead>
+              <tr>
+                <th>仓库</th>
+                <th>数量</th>
+              </tr>
+            </thead>
+            <tbody id="closedWarehouseMissingRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="error-section">
+        <div class="table-title-row">
+          <div class="table-title">有库存没有结算价（含税）的物料</div>
+          <button class="secondary compact-button" type="button" data-download-error="closed.settlementMissing">下载</button>
+        </div>
+        <div class="diagnostic-panel show">
+          <span>来源：关账后库存事实表，取有库存物料编码和数量。</span>
+          <span>比对：商品分类维表物料编码对应的结算价（含税）。</span>
+          <span>缺失提示：销售成品有库存，但商品分类维表结算价（含税）为空或为 0。</span>
+          <span>需要维护：维度表文件库的商品分类维表结算价（含税）。</span>
+        </div>
+        <div class="table-panel">
+          <table>
+            <thead>
+              <tr>
+                <th>物料编码</th>
+                <th>物料名称</th>
+                <th>销售产品线</th>
+                <th>数量</th>
+              </tr>
+            </thead>
+            <tbody id="closedSettlementMissingRows"></tbody>
+          </table>
+        </div>
+      </section>
+      </section>
+
+      <section class="error-source-panel">
+      <section class="error-source-title">
+        <h2>根据库存分析月份表</h2>
+        <p>数量取库存分析月份表的合计库存数量；结算价、销售产品线、销售系列通过物料编码匹配商品分类维表；事业部按 D列使用组织 + C列仓库 + A列物料编码 匹配仓库物料事业部对照表 F列。</p>
+      </section>
+
+      <section class="metrics error-metrics">
+        <div class="metric-card"><span>有库存物料数</span><strong id="detailStockMaterialCount">0</strong></div>
+        <div class="metric-card"><span>商品分类缺失</span><strong id="detailProductMissingCount">0</strong></div>
+        <div class="metric-card"><span>事业部对照缺失</span><strong id="detailDivisionMissingCount">0</strong></div>
+        <div class="metric-card"><span>仓库对照缺失</span><strong id="detailWarehouseMissingCount">0</strong></div>
+        <div class="metric-card"><span>结算价缺失</span><strong id="detailSettlementMissingCount">0</strong></div>
+      </section>
+
+      <section class="error-section">
+        <div class="table-title-row">
+          <div class="table-title">有库存商品维度表没有信息</div>
+          <button class="secondary compact-button" type="button" data-download-error="detail.productMissing">下载</button>
+        </div>
+        <div class="diagnostic-panel show">
+          <span>来源：库存分析月份表 A列物料编码，按合计库存数量大于 0 汇总。</span>
+          <span>比对：商品分类维表 A列物料编码。</span>
+          <span>缺失提示：库存分析月份表有库存物料编码在商品分类维表没有信息。</span>
+          <span>需要维护：维度表文件库的商品分类维表。</span>
+        </div>
+        <div class="table-panel">
+          <table>
+            <thead>
+              <tr>
+                <th>物料编码</th>
+                <th>SKU</th>
+                <th>物料名称</th>
+                <th>数量</th>
+              </tr>
+            </thead>
+            <tbody id="detailProductMissingRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="error-section">
+        <div class="table-title-row">
+          <div class="table-title">有库存仓库物料事业部对照表没有信息</div>
+          <button class="secondary compact-button" type="button" data-download-error="detail.divisionMissing">下载</button>
+        </div>
+        <div class="diagnostic-panel show">
+          <span>来源：库存分析月份表 D列使用组织 + C列仓库 + A列物料编码。</span>
+          <span>比对：仓库物料事业部对照表 F列三元组合匹配键。</span>
+          <span>缺失提示：有库存记录的三元组合在仓库物料事业部对照表没有信息。</span>
+          <span>需要维护：维度表文件库的仓库物料事业部对照表。</span>
+        </div>
+        <div class="table-panel">
+          <table>
+            <thead>
+              <tr>
+                <th>物料编码</th>
+                <th>SKU</th>
+                <th>物料名称</th>
+                <th>数量</th>
+              </tr>
+            </thead>
+            <tbody id="detailDivisionMissingRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="error-section">
+        <div class="table-title-row">
+          <div class="table-title">有库存仓库、金蝶、旺店通、领星没有信息</div>
+          <button class="secondary compact-button" type="button" data-download-error="detail.warehouseMissing">下载</button>
+        </div>
+        <div class="diagnostic-panel show">
+          <span>来源：库存分析月份表 C列仓库，按合计库存数量大于 0 汇总。</span>
+          <span>比对：仓库、金蝶、旺店通、领星 B列仓库金蝶名称。</span>
+          <span>缺失提示：库存分析月份表有库存仓库在仓库维表没有信息。</span>
+          <span>需要维护：维度表文件库的仓库、金蝶、旺店通、领星。</span>
+        </div>
+        <div class="table-panel">
+          <table>
+            <thead>
+              <tr>
+                <th>仓库</th>
+                <th>数量</th>
+              </tr>
+            </thead>
+            <tbody id="detailWarehouseMissingRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="error-section">
+        <div class="table-title-row">
+          <div class="table-title">有库存没有结算价（含税）的物料</div>
+          <button class="secondary compact-button" type="button" data-download-error="detail.settlementMissing">下载</button>
+        </div>
+        <div class="diagnostic-panel show">
+          <span>来源：库存分析月份表 A列物料编码和合计库存数量。</span>
+          <span>比对：商品分类维表物料编码对应的结算价（含税）。</span>
+          <span>缺失提示：销售成品有库存，但商品分类维表结算价（含税）为空或为 0。</span>
+          <span>需要维护：维度表文件库的商品分类维表结算价（含税）。</span>
+        </div>
+        <div class="table-panel">
+          <table>
+            <thead>
+              <tr>
+                <th>物料编码</th>
+                <th>物料名称</th>
+                <th>销售产品线</th>
+                <th>数量</th>
+              </tr>
+            </thead>
+            <tbody id="detailSettlementMissingRows"></tbody>
+          </table>
+        </div>
+      </section>
+      </section>
+
+      <section class="error-source-panel">
+      <section class="error-source-title">
+        <h2>根据销售数据文件</h2>
+        <p>按销售数据文件中的物料编码、客户名称，检查商品分类维表、客户与物料对照表；销售数据文件 B列客户名称与店铺名称汇总（金蝶&领星&简称）B列金蝶名称对比，提示缺失映射。</p>
+      </section>
+
+      <section class="metrics error-metrics sales-error-metrics">
+        <div class="metric-card"><span>销售记录数</span><strong id="salesRowCount">0</strong></div>
+        <div class="metric-card"><span>销售物料数</span><strong id="salesStockMaterialCount">0</strong></div>
+        <div class="metric-card"><span>商品分类缺失</span><strong id="salesProductMissingCount">0</strong></div>
+        <div class="metric-card"><span>客户物料缺失</span><strong id="salesCustomerMaterialMissingCount">0</strong></div>
+        <div class="metric-card"><span>店铺名称缺失</span><strong id="salesStoreMissingCount">0</strong></div>
+      </section>
+
+      <section class="error-section">
+        <div class="table-title-row">
+          <div class="table-title">销售数据商品维度表没有信息</div>
+          <button class="secondary compact-button" type="button" data-download-error="sales.productMissing">下载</button>
+        </div>
+        <div class="diagnostic-panel show">
+          <span>来源：销售数据文件的物料编码，按销售数量汇总。</span>
+          <span>比对：商品分类维表 A列物料编码。</span>
+          <span>缺失提示：销售数据文件有销售物料编码在商品分类维表没有信息。</span>
+          <span>需要维护：维度表文件库的商品分类维表。</span>
+        </div>
+        <div class="table-panel">
+          <table>
+            <thead>
+              <tr>
+                <th>物料编码</th>
+                <th>SKU</th>
+                <th>物料名称</th>
+                <th>数量</th>
+              </tr>
+            </thead>
+            <tbody id="salesProductMissingRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="error-section">
+        <div class="table-title-row">
+          <div class="table-title">销售数据客户与物料对照表没有信息</div>
+          <button class="secondary compact-button" type="button" data-download-error="sales.customerMaterialMissing">下载</button>
+        </div>
+        <div class="diagnostic-panel show">
+          <span>来源：销售数据文件客户名称 + 物料编码组合。</span>
+          <span>比对：客户与物料对照表维护的客户物料匹配关系。</span>
+          <span>缺失提示：销售数据文件存在客户和物料组合，但客户与物料对照表没有信息。</span>
+          <span>需要维护：维度表文件库的客户与物料对照表。</span>
+        </div>
+        <div class="table-panel">
+          <table>
+            <thead>
+              <tr>
+                <th>客户/店铺</th>
+                <th>物料编码</th>
+                <th>SKU</th>
+                <th>物料名称</th>
+                <th>数量</th>
+              </tr>
+            </thead>
+            <tbody id="salesCustomerMaterialMissingRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="error-section">
+        <div class="table-title-row">
+          <div class="table-title">销售数据店铺名称汇总没有信息</div>
+          <button class="secondary compact-button" type="button" data-download-error="sales.storeMissing">下载</button>
+        </div>
+        <div id="salesStoreDiagnostic" class="diagnostic-panel show"></div>
+        <div class="table-panel">
+          <table>
+            <thead>
+              <tr>
+                <th>客户名称</th>
+                <th>数量</th>
+              </tr>
+            </thead>
+            <tbody id="salesStoreMissingRows"></tbody>
+          </table>
+        </div>
+      </section>
+      </section>
+    </main>
+  </div>
+
+  <script src="vendor/xlsx.full.min.js?v=20260611b"></script>
+  <script src="storage.js?v=20260611k"></script>
+  <script src="shared-library.js?v=20260611a"></script>
+  <script src="errors.js?v=20260611p"></script>
+</body>
+</html>

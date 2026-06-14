@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>库存分析看板 库存数据文件</title>
+  <link rel="stylesheet" href="styles.css?v=20260612h">
+</head>
+<body data-library-type="fact">
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <strong>库存分析看板</strong>
+        <span>供应链维护更新</span>
+      </div>
+      <nav class="nav">
+        <a href="receipt-summary.html">供应链库存分析</a>
+        <a href="sales-analysis.html">销售数据分析</a>
+        <a href="comparison.html">表格对比分析</a>
+        <a class="active" href="fact-library.html">库存数据文件</a>
+        <a href="sales-library.html">销售数据文件</a>
+        <a href="file-library.html">维度表文件库</a>
+        <a href="errors.html">报错信息提示</a>
+      </nav>
+    </aside>
+
+    <main class="content">
+      <header class="topbar">
+        <div>
+          <h1>库存数据文件</h1>
+          <p>上传库存分析和收发汇总数据文件。看板会按对应槽位读取并应用。</p>
+        </div>
+        <div class="topbar-actions">
+          <button id="applyAllBtn" class="secondary" type="button">一键全部应用刷新</button>
+          <button id="clearCacheBtn" class="danger" type="button">清除缓存</button>
+        </div>
+      </header>
+
+      <section class="library-summary">
+        <div class="summary-head">
+          <div>
+            <span id="libraryEyebrow" class="summary-eyebrow">FACT FILES</span>
+            <h2 id="libraryTitle">月度库存数据文件</h2>
+          </div>
+          <span id="savedBadge" class="saved-badge">库存数据文件已保存</span>
+        </div>
+        <div class="summary-metrics">
+          <div><span>库存文件上限</span><strong id="slotLimit">0</strong></div>
+          <div><span>已上传库存文件</span><strong id="uploadedCount">0</strong></div>
+          <div><span>已应用库存文件</span><strong id="appliedCount">0</strong></div>
+          <div><span>最近更新</span><strong id="latestUpdate">-</strong></div>
+        </div>
+        <div class="toolbar">
+          <button id="refreshBtn" type="button">应用刷新</button>
+          <button id="downloadSharedBtn" class="secondary" type="button">导出共享数据包</button>
+          <button id="importSharedBtn" class="secondary" type="button">导入共享数据包</button>
+          <input id="importSharedInput" class="hidden-file-input" type="file" accept=".json">
+          <span class="muted" id="sharedStatus">正在同步共享文件库...</span>
+        </div>
+      </section>
+
+      <section id="libraryGrid" class="library-grid"></section>
+    </main>
+  </div>
+
+  <script src="vendor/xlsx.full.min.js?v=20260611b"></script>
+  <script src="storage.js?v=20260611k"></script>
+  <script src="shared-library.js?v=20260611a"></script>
+  <script src="library-page.js?v=20260611j"></script>
+</body>
+</html>

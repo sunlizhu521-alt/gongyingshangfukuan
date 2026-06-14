@@ -761,6 +761,37 @@ th {
   color: #64748b;
 }
 
+.embedded-dashboard-panel {
+  height: calc(100vh - 64px);
+  min-height: 720px;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 12px;
+}
+
+.embedded-dashboard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.embedded-dashboard-header h2 {
+  margin: 0;
+}
+
+.embedded-dashboard-link {
+  text-decoration: none;
+}
+
+.embedded-dashboard-panel iframe {
+  width: 100%;
+  height: 100%;
+  border: 1px solid #d7dee8;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
 .actions,
 .inline-form,
 .management-grid {
