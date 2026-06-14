@@ -33,6 +33,7 @@ function App() {
   const [ownerImportResult, setOwnerImportResult] = useState(null);
   const [inspectionInitialData, setInspectionInitialData] = useState({ sheetName: '', columns: [], rows: [], updatedAt: '' });
   const [inspectionInitialImportResult, setInspectionInitialImportResult] = useState(null);
+  const [inspectionNoticeSubmission, setInspectionNoticeSubmission] = useState({ rows: [], submittedAt: '', submittedBy: '' });
   const [dimensionShortNameFilter, setDimensionShortNameFilter] = useState([]);
   const [dimensionOwnerFilter, setDimensionOwnerFilter] = useState([]);
   const [dimensionAnnualFilter, setDimensionAnnualFilter] = useState([]);
@@ -131,7 +132,7 @@ function App() {
 
   async function loadData() {
     const params = user ? `?user=${encodeURIComponent(user.name)}&role=${encodeURIComponent(user.role)}` : '';
-    const [invoiceRes, draftRes, supplierRes, ownerRes, reminderRes, settingsRes, usersRes, inspectionInitialRes] = await Promise.all([
+    const [invoiceRes, draftRes, supplierRes, ownerRes, reminderRes, settingsRes, usersRes, inspectionInitialRes, inspectionNoticeRes] = await Promise.all([
       fetch(`${API}/api/invoices${params}`),
       fetch(`${API}/api/drafts${params}`),
       fetch(`${API}/api/suppliers`),
@@ -139,7 +140,8 @@ function App() {
       fetch(`${API}/api/reminders${params}`),
       fetch(`${API}/api/settings${params}`),
       canManagePermissions ? fetch(`${API}/api/users${params}`) : Promise.resolve(null),
-      canAccessTab('inspectionInitialData') ? fetch(`${API}/api/quality-inspection/initial-data${params}`) : Promise.resolve(null)
+      (canAccessTab('inspectionInitialData') || canAccessTab('inspectionNotice')) ? fetch(`${API}/api/quality-inspection/initial-data${params}`) : Promise.resolve(null),
+      canAccessTab('inspectionNotice') ? fetch(`${API}/api/quality-inspection/notices${params}`) : Promise.resolve(null)
     ]);
     setInvoices(await invoiceRes.json());
     setDrafts(await draftRes.json());
@@ -158,8 +160,13 @@ function App() {
     }
     if (inspectionInitialRes?.ok) {
       setInspectionInitialData(await inspectionInitialRes.json());
-    } else if (!canAccessTab('inspectionInitialData')) {
+    } else if (!canAccessTab('inspectionInitialData') && !canAccessTab('inspectionNotice')) {
       setInspectionInitialData({ sheetName: '', columns: [], rows: [], updatedAt: '' });
+    }
+    if (inspectionNoticeRes?.ok) {
+      setInspectionNoticeSubmission(await inspectionNoticeRes.json());
+    } else if (!canAccessTab('inspectionNotice')) {
+      setInspectionNoticeSubmission({ rows: [], submittedAt: '', submittedBy: '' });
     }
   }
 
@@ -367,6 +374,64 @@ function App() {
   const inspectionInitialColumns = useMemo(() => {
     return inspectionInitialData.columns?.length ? inspectionInitialData.columns : ['暂无字段'];
   }, [inspectionInitialData.columns]);
+  function getInspectionValue(row, aliases) {
+    const normalizedEntries = Object.entries(row || {}).map(([key, value]) => [
+      String(key).replace(/\s+/g, ''),
+      value
+    ]);
+    for (const alias of aliases) {
+      if (Object.prototype.hasOwnProperty.call(row || {}, alias)) return row[alias] || '';
+      const normalizedAlias = String(alias).replace(/\s+/g, '');
+      const matched = normalizedEntries.find(([key]) => key === normalizedAlias);
+      if (matched) return matched[1] || '';
+    }
+    return '';
+  }
+
+  function parseQuantity(value) {
+    const number = Number(String(value || '').replace(/,/g, '').match(/-?\d+(?:\.\d+)?/)?.[0] || 0);
+    return Number.isFinite(number) ? number : 0;
+  }
+
+  const inspectionNoticeRows = useMemo(() => {
+    const groups = new Map();
+    (inspectionInitialData.rows || []).forEach((row) => {
+      const base = {
+        inspectionFillTime: getInspectionValue(row, ['验货填写时间']),
+        supplierFinishTime: getInspectionValue(row, ['供应商完工时间']),
+        shipmentTime: getInspectionValue(row, ['发货时间']),
+        kingdeeOrderNo: getInspectionValue(row, ['金蝶采购订单', '金蝶订单', '采购订单']),
+        supplierShortName: getInspectionValue(row, ['供应商简称', '厂商', '供应商']),
+        operation: getInspectionValue(row, ['运营']),
+        firstInspection: getInspectionValue(row, ['是否首批验货']),
+        series: getInspectionValue(row, ['系列']),
+        remark: getInspectionValue(row, ['备注'])
+      };
+      const sku = getInspectionValue(row, ['SKU', 'sku']);
+      const quantityText = getInspectionValue(row, ['数量', '此次验货数量']);
+      const quantity = parseQuantity(quantityText);
+      const key = JSON.stringify(base);
+      if (!groups.has(key)) {
+        groups.set(key, {
+          id: crypto.randomUUID(),
+          ...base,
+          totalQuantity: 0,
+          skuItems: []
+        });
+      }
+      const item = groups.get(key);
+      item.totalQuantity += quantity;
+      if (sku || quantityText) {
+        item.skuItems.push(`${sku || '未填SKU'}${quantityText ? ` x ${quantityText}` : ''}`);
+      }
+    });
+
+    return [...groups.values()].map((row) => ({
+      ...row,
+      totalQuantity: row.totalQuantity || '',
+      skuQuantity: row.skuItems.join('；')
+    }));
+  }, [inspectionInitialData.rows]);
   const filteredAppliedDimensionRows = useMemo(() => {
     return appliedDimensionRows.filter((row) =>
       (dimensionShortNameFilter.length === 0 || dimensionShortNameFilter.includes(row.shortName)) &&
@@ -576,6 +641,26 @@ function App() {
     setInspectionInitialData(result);
     setInspectionInitialImportResult(result);
     setMessage(`验货信息初始数据已读取：成功 ${result.importedCount || 0} 行。`);
+  }
+
+  async function confirmInspectionNotice() {
+    if (!inspectionNoticeRows.length) {
+      setMessage('没有可提交的验货通知数据，请先上传验货信息初始数据。');
+      return;
+    }
+    const res = await fetch(`${API}/api/quality-inspection/notices`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user: user.name, rows: inspectionNoticeRows })
+    });
+    if (!res.ok) {
+      setMessage('验货通知提交失败，请确认当前账号有权限。');
+      return;
+    }
+    const result = await res.json();
+    setInspectionNoticeSubmission(result);
+    setMessage(`验货通知已确认提交：共 ${result.rows?.length || 0} 条。`);
+    await loadData();
   }
 
   function downloadImportResult(type, result) {
@@ -1365,7 +1450,38 @@ function App() {
           </>
         )}
 
-        {qualityInspectionPages[activeTab] && activeTab !== 'inspectionInitialData' && canAccessTab(activeTab) && (
+        {activeTab === 'inspectionNotice' && canAccessTab('inspectionNotice') && (
+          <>
+            <div className="section-heading-row">
+              <h2>验货通知</h2>
+              <span className="section-count">共 {inspectionNoticeRows.length} 条</span>
+              {inspectionNoticeSubmission.submittedAt && (
+                <span className="section-count">已提交：{inspectionNoticeSubmission.submittedAt}</span>
+              )}
+              <button type="button" onClick={confirmInspectionNotice}>确认提交</button>
+            </div>
+            <DataTable
+              className="inspection-notice-table"
+              rows={inspectionNoticeRows}
+              columns={['验货填写时间', '供应商完工时间', '发货时间', '金蝶采购订单', '供应商简称', '运营', '是否首批验货', '系列', '合计数量', 'SKU及数量', '备注']}
+              render={(row) => [
+                row.inspectionFillTime,
+                row.supplierFinishTime,
+                row.shipmentTime,
+                row.kingdeeOrderNo,
+                row.supplierShortName,
+                row.operation,
+                row.firstInspection,
+                row.series,
+                row.totalQuantity,
+                row.skuQuantity,
+                row.remark
+              ]}
+            />
+          </>
+        )}
+
+        {qualityInspectionPages[activeTab] && !['inspectionInitialData', 'inspectionNotice'].includes(activeTab) && canAccessTab(activeTab) && (
           <section className="placeholder-panel">
             <h2>{qualityInspectionPages[activeTab]}</h2>
             <p>当前页面已建立入口，具体业务内容待配置。</p>

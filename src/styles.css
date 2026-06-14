@@ -462,6 +462,25 @@ h3 {
   white-space: nowrap;
 }
 
+.inspection-notice-table table {
+  min-width: 1320px;
+}
+
+.inspection-notice-table th,
+.inspection-notice-table td {
+  border-right: 1px solid #edf1f6;
+  text-align: center;
+}
+
+.inspection-notice-table th {
+  white-space: nowrap;
+}
+
+.inspection-notice-table th:last-child,
+.inspection-notice-table td:last-child {
+  border-right: 0;
+}
+
 .single-management-panel {
   display: grid;
   gap: 14px;

@@ -173,6 +173,12 @@ function normalizeDb(db) {
       rows: [],
       updatedAt: '',
       ...(db.qualityInspection?.initialData || {})
+    },
+    notices: {
+      rows: [],
+      submittedAt: '',
+      submittedBy: '',
+      ...(db.qualityInspection?.notices || {})
     }
   };
   return db;
@@ -304,6 +310,15 @@ function hasUserPermission(user, permission) {
 function requirePermission(db, req, res, permission) {
   const requestUser = resolveRequestUser(db, { ...req.query, ...req.body });
   if (!hasUserPermission(requestUser, permission)) {
+    res.status(403).json({ error: 'permission denied' });
+    return null;
+  }
+  return requestUser;
+}
+
+function requireAnyPermission(db, req, res, permissions) {
+  const requestUser = resolveRequestUser(db, { ...req.query, ...req.body });
+  if (!permissions.some((permission) => hasUserPermission(requestUser, permission))) {
     res.status(403).json({ error: 'permission denied' });
     return null;
   }
@@ -1085,7 +1100,10 @@ app.post('/api/owners/import', upload.single('file'), async (req, res) => {
 
 app.get('/api/quality-inspection/initial-data', async (req, res) => {
   const db = await ensureDb();
-  if (!requirePermission(db, req, res, 'qualityInspection.inspectionInitialData')) return;
+  if (!requireAnyPermission(db, req, res, [
+    'qualityInspection.inspectionInitialData',
+    'qualityInspection.inspectionNotice'
+  ])) return;
   res.json(db.qualityInspection.initialData);
 });
 
@@ -1113,6 +1131,31 @@ app.post('/api/quality-inspection/initial-data/import', upload.single('file'), a
   } finally {
     await removeUploadedFile(req.file.filename);
   }
+});
+
+app.get('/api/quality-inspection/notices', async (req, res) => {
+  const db = await ensureDb();
+  if (!requirePermission(db, req, res, 'qualityInspection.inspectionNotice')) return;
+  res.json(db.qualityInspection.notices);
+});
+
+app.post('/api/quality-inspection/notices', async (req, res) => {
+  const db = await ensureDb();
+  const requestUser = requirePermission(db, req, res, 'qualityInspection.inspectionNotice');
+  if (!requestUser) return;
+  const rows = Array.isArray(req.body.rows) ? req.body.rows : [];
+  db.qualityInspection.notices = {
+    rows: rows.map((row, index) => ({
+      id: row.id || crypto.randomUUID(),
+      rowNumber: index + 1,
+      ...row
+    })),
+    submittedAt: format(new Date(), 'yyyy-MM-dd HH:mm:ss'),
+    submittedBy: requestUser.name
+  };
+  pushLog(db, '验货通知提交', requestUser.name, `${requestUser.name} 提交验货通知 ${rows.length} 条。`);
+  await saveDb(db);
+  res.json(db.qualityInspection.notices);
 });
 
 app.get('/api/reminders', async (req, res) => {
