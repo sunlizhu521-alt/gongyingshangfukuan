@@ -823,7 +823,7 @@ function App() {
               rows={invoices}
               columns={['采购员', '供应商', '发票号', '金额', '开票日', '状态', 'OA流程号', '是否付款', '上传人', '文件预览', '操作']}
               render={(row) => [
-                row.owner || findBuyerForSupplier(row.supplier) || '未匹配',
+                findBuyerForSupplier(row.supplier) || '未匹配',
                 row.supplier,
                 row.invoiceNo,
                 `¥${Number(row.amount || 0).toLocaleString()}`,
