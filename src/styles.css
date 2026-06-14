@@ -481,6 +481,17 @@ h3 {
   border-right: 0;
 }
 
+.inspection-notice-input {
+  width: 150px;
+  min-width: 150px;
+}
+
+.table-textarea {
+  min-height: 38px;
+  padding: 6px 8px;
+  resize: vertical;
+}
+
 .single-management-panel {
   display: grid;
   gap: 14px;

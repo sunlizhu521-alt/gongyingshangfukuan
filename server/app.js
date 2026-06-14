@@ -316,15 +316,6 @@ function requirePermission(db, req, res, permission) {
   return requestUser;
 }
 
-function requireAnyPermission(db, req, res, permissions) {
-  const requestUser = resolveRequestUser(db, { ...req.query, ...req.body });
-  if (!permissions.some((permission) => hasUserPermission(requestUser, permission))) {
-    res.status(403).json({ error: 'permission denied' });
-    return null;
-  }
-  return requestUser;
-}
-
 function requireSystemOwner(db, req, res) {
   const requestUser = resolveRequestUser(db, { ...req.query, ...req.body });
   if (requestUser?.name !== SYSTEM_OWNER_NAME) {
@@ -1100,10 +1091,7 @@ app.post('/api/owners/import', upload.single('file'), async (req, res) => {
 
 app.get('/api/quality-inspection/initial-data', async (req, res) => {
   const db = await ensureDb();
-  if (!requireAnyPermission(db, req, res, [
-    'qualityInspection.inspectionInitialData',
-    'qualityInspection.inspectionNotice'
-  ])) return;
+  if (!requirePermission(db, req, res, 'qualityInspection.inspectionInitialData')) return;
   res.json(db.qualityInspection.initialData);
 });
 

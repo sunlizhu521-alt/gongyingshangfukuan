@@ -5,6 +5,29 @@ import './styles.css';
 
 const API = import.meta.env.DEV ? 'http://localhost:4001' : '';
 
+const INSPECTION_NOTICE_FIELDS = [
+  { key: 'inspectionFillTime', label: '验货填写时间' },
+  { key: 'supplierFinishTime', label: '供应商完工时间' },
+  { key: 'shipmentTime', label: '发货时间' },
+  { key: 'kingdeeOrderNo', label: '金蝶采购订单' },
+  { key: 'supplierShortName', label: '供应商简称' },
+  { key: 'operation', label: '运营' },
+  { key: 'firstInspection', label: '是否首批验货' },
+  { key: 'series', label: '系列' },
+  { key: 'totalQuantity', label: '合计数量' },
+  { key: 'skuQuantity', label: 'SKU及数量', multiline: true },
+  { key: 'remark', label: '备注', multiline: true }
+];
+
+function createInspectionNoticeRow(values = {}) {
+  return INSPECTION_NOTICE_FIELDS.reduce((row, field) => ({
+    ...row,
+    [field.key]: values[field.key] || ''
+  }), {
+    id: values.id || crypto.randomUUID()
+  });
+}
+
 function App() {
   const [activeTab, setActiveTab] = useState('ledger');
   const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('invoiceUser') || 'null'));
@@ -34,6 +57,7 @@ function App() {
   const [inspectionInitialData, setInspectionInitialData] = useState({ sheetName: '', columns: [], rows: [], updatedAt: '' });
   const [inspectionInitialImportResult, setInspectionInitialImportResult] = useState(null);
   const [inspectionNoticeSubmission, setInspectionNoticeSubmission] = useState({ rows: [], submittedAt: '', submittedBy: '' });
+  const [inspectionNoticeRows, setInspectionNoticeRows] = useState(() => [createInspectionNoticeRow()]);
   const [dimensionShortNameFilter, setDimensionShortNameFilter] = useState([]);
   const [dimensionOwnerFilter, setDimensionOwnerFilter] = useState([]);
   const [dimensionAnnualFilter, setDimensionAnnualFilter] = useState([]);
@@ -140,7 +164,7 @@ function App() {
       fetch(`${API}/api/reminders${params}`),
       fetch(`${API}/api/settings${params}`),
       canManagePermissions ? fetch(`${API}/api/users${params}`) : Promise.resolve(null),
-      (canAccessTab('inspectionInitialData') || canAccessTab('inspectionNotice')) ? fetch(`${API}/api/quality-inspection/initial-data${params}`) : Promise.resolve(null),
+      canAccessTab('inspectionInitialData') ? fetch(`${API}/api/quality-inspection/initial-data${params}`) : Promise.resolve(null),
       canAccessTab('inspectionNotice') ? fetch(`${API}/api/quality-inspection/notices${params}`) : Promise.resolve(null)
     ]);
     setInvoices(await invoiceRes.json());
@@ -160,13 +184,19 @@ function App() {
     }
     if (inspectionInitialRes?.ok) {
       setInspectionInitialData(await inspectionInitialRes.json());
-    } else if (!canAccessTab('inspectionInitialData') && !canAccessTab('inspectionNotice')) {
+    } else if (!canAccessTab('inspectionInitialData')) {
       setInspectionInitialData({ sheetName: '', columns: [], rows: [], updatedAt: '' });
     }
     if (inspectionNoticeRes?.ok) {
-      setInspectionNoticeSubmission(await inspectionNoticeRes.json());
+      const noticeSubmission = await inspectionNoticeRes.json();
+      const noticeRows = noticeSubmission.rows?.length
+        ? noticeSubmission.rows.map((row) => createInspectionNoticeRow(row))
+        : [createInspectionNoticeRow()];
+      setInspectionNoticeSubmission(noticeSubmission);
+      setInspectionNoticeRows(noticeRows);
     } else if (!canAccessTab('inspectionNotice')) {
       setInspectionNoticeSubmission({ rows: [], submittedAt: '', submittedBy: '' });
+      setInspectionNoticeRows([createInspectionNoticeRow()]);
     }
   }
 
@@ -374,64 +404,6 @@ function App() {
   const inspectionInitialColumns = useMemo(() => {
     return inspectionInitialData.columns?.length ? inspectionInitialData.columns : ['暂无字段'];
   }, [inspectionInitialData.columns]);
-  function getInspectionValue(row, aliases) {
-    const normalizedEntries = Object.entries(row || {}).map(([key, value]) => [
-      String(key).replace(/\s+/g, ''),
-      value
-    ]);
-    for (const alias of aliases) {
-      if (Object.prototype.hasOwnProperty.call(row || {}, alias)) return row[alias] || '';
-      const normalizedAlias = String(alias).replace(/\s+/g, '');
-      const matched = normalizedEntries.find(([key]) => key === normalizedAlias);
-      if (matched) return matched[1] || '';
-    }
-    return '';
-  }
-
-  function parseQuantity(value) {
-    const number = Number(String(value || '').replace(/,/g, '').match(/-?\d+(?:\.\d+)?/)?.[0] || 0);
-    return Number.isFinite(number) ? number : 0;
-  }
-
-  const inspectionNoticeRows = useMemo(() => {
-    const groups = new Map();
-    (inspectionInitialData.rows || []).forEach((row) => {
-      const base = {
-        inspectionFillTime: getInspectionValue(row, ['验货填写时间']),
-        supplierFinishTime: getInspectionValue(row, ['供应商完工时间']),
-        shipmentTime: getInspectionValue(row, ['发货时间']),
-        kingdeeOrderNo: getInspectionValue(row, ['金蝶采购订单', '金蝶订单', '采购订单']),
-        supplierShortName: getInspectionValue(row, ['供应商简称', '厂商', '供应商']),
-        operation: getInspectionValue(row, ['运营']),
-        firstInspection: getInspectionValue(row, ['是否首批验货']),
-        series: getInspectionValue(row, ['系列']),
-        remark: getInspectionValue(row, ['备注'])
-      };
-      const sku = getInspectionValue(row, ['SKU', 'sku']);
-      const quantityText = getInspectionValue(row, ['数量', '此次验货数量']);
-      const quantity = parseQuantity(quantityText);
-      const key = JSON.stringify(base);
-      if (!groups.has(key)) {
-        groups.set(key, {
-          id: crypto.randomUUID(),
-          ...base,
-          totalQuantity: 0,
-          skuItems: []
-        });
-      }
-      const item = groups.get(key);
-      item.totalQuantity += quantity;
-      if (sku || quantityText) {
-        item.skuItems.push(`${sku || '未填SKU'}${quantityText ? ` x ${quantityText}` : ''}`);
-      }
-    });
-
-    return [...groups.values()].map((row) => ({
-      ...row,
-      totalQuantity: row.totalQuantity || '',
-      skuQuantity: row.skuItems.join('；')
-    }));
-  }, [inspectionInitialData.rows]);
   const filteredAppliedDimensionRows = useMemo(() => {
     return appliedDimensionRows.filter((row) =>
       (dimensionShortNameFilter.length === 0 || dimensionShortNameFilter.includes(row.shortName)) &&
@@ -643,22 +615,46 @@ function App() {
     setMessage(`验货信息初始数据已读取：成功 ${result.importedCount || 0} 行。`);
   }
 
+  function updateInspectionNoticeRow(id, field, value) {
+    setInspectionNoticeRows((rows) => rows.map((row) => (
+      row.id === id ? { ...row, [field]: value } : row
+    )));
+  }
+
+  function addInspectionNoticeRow() {
+    setInspectionNoticeRows((rows) => [...rows, createInspectionNoticeRow()]);
+  }
+
+  function deleteInspectionNoticeRow(id) {
+    setInspectionNoticeRows((rows) => {
+      const nextRows = rows.filter((row) => row.id !== id);
+      return nextRows.length ? nextRows : [createInspectionNoticeRow()];
+    });
+  }
+
   async function confirmInspectionNotice() {
-    if (!inspectionNoticeRows.length) {
-      setMessage('没有可提交的验货通知数据，请先上传验货信息初始数据。');
+    const rowsToSubmit = inspectionNoticeRows
+      .map((row) => createInspectionNoticeRow(row))
+      .filter((row) => INSPECTION_NOTICE_FIELDS.some((field) => String(row[field.key] || '').trim()));
+    if (!rowsToSubmit.length) {
+      setMessage('请至少填写一条验货通知后再提交。');
       return;
     }
     const res = await fetch(`${API}/api/quality-inspection/notices`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user: user.name, rows: inspectionNoticeRows })
+      body: JSON.stringify({ user: user.name, rows: rowsToSubmit })
     });
     if (!res.ok) {
       setMessage('验货通知提交失败，请确认当前账号有权限。');
       return;
     }
     const result = await res.json();
+    const savedRows = result.rows?.length
+      ? result.rows.map((row) => createInspectionNoticeRow(row))
+      : [createInspectionNoticeRow()];
     setInspectionNoticeSubmission(result);
+    setInspectionNoticeRows(savedRows);
     setMessage(`验货通知已确认提交：共 ${result.rows?.length || 0} 条。`);
     await loadData();
   }
@@ -1458,24 +1454,28 @@ function App() {
               {inspectionNoticeSubmission.submittedAt && (
                 <span className="section-count">已提交：{inspectionNoticeSubmission.submittedAt}</span>
               )}
+              <button type="button" className="ghost" onClick={addInspectionNoticeRow}>新增一行</button>
               <button type="button" onClick={confirmInspectionNotice}>确认提交</button>
             </div>
             <DataTable
               className="inspection-notice-table"
               rows={inspectionNoticeRows}
-              columns={['验货填写时间', '供应商完工时间', '发货时间', '金蝶采购订单', '供应商简称', '运营', '是否首批验货', '系列', '合计数量', 'SKU及数量', '备注']}
+              columns={[...INSPECTION_NOTICE_FIELDS.map((field) => field.label), '操作']}
               render={(row) => [
-                row.inspectionFillTime,
-                row.supplierFinishTime,
-                row.shipmentTime,
-                row.kingdeeOrderNo,
-                row.supplierShortName,
-                row.operation,
-                row.firstInspection,
-                row.series,
-                row.totalQuantity,
-                row.skuQuantity,
-                row.remark
+                ...INSPECTION_NOTICE_FIELDS.map((field) => field.multiline ? (
+                  <textarea
+                    className="table-textarea inspection-notice-input"
+                    value={row[field.key] || ''}
+                    onChange={(event) => updateInspectionNoticeRow(row.id, field.key, event.target.value)}
+                  />
+                ) : (
+                  <input
+                    className="table-input inspection-notice-input"
+                    value={row[field.key] || ''}
+                    onChange={(event) => updateInspectionNoticeRow(row.id, field.key, event.target.value)}
+                  />
+                )),
+                <button type="button" className="danger-button" onClick={() => deleteInspectionNoticeRow(row.id)}>删除</button>
               ]}
             />
           </>
