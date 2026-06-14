@@ -874,7 +874,13 @@ app.patch('/api/settings', async (req, res) => {
   res.json(publicSettings(db.settings, requestUser));
 });
 
-const port = process.env.PORT || 4000;
+const distDir = path.join(rootDir, 'dist');
+app.use(express.static(distDir));
+app.get(/^\/(?!api|uploads|preview).*/, (req, res) => {
+  res.sendFile(path.join(distDir, 'index.html'));
+});
+
+const port = process.env.PORT || 4001;
 app.listen(port, async () => {
   await ensureDb();
   startWeeklyPaymentEmailScheduler();

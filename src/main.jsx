@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import * as XLSX from 'xlsx';
 import './styles.css';
 
-const API = 'http://localhost:4000';
+const API = '';
 
 function App() {
   const [activeTab, setActiveTab] = useState('ledger');
@@ -59,7 +59,7 @@ function App() {
   }
 
   useEffect(() => {
-    if (user) loadData().catch(() => setMessage('后端服务连接失败，请确认 localhost:4000 已启动。'));
+    if (user) loadData().catch(() => setMessage('后端服务连接失败，请确认服务已启动。'));
   }, [user]);
 
   useEffect(() => {
