@@ -35,6 +35,7 @@ function App() {
   const [dimensionAnnualFilter, setDimensionAnnualFilter] = useState([]);
   const isAdmin = user?.role === '管理员';
   const canManageMailSettings = user?.name === '孙立柱';
+  const canManageInvoiceInventory = user?.name === '孙立柱';
 
   async function loadData() {
     const params = user ? `?user=${encodeURIComponent(user.name)}&role=${encodeURIComponent(user.role)}` : '';
@@ -66,7 +67,10 @@ function App() {
     if (user && !isAdmin && activeTab === 'suppliers') {
       setActiveTab('ledger');
     }
-  }, [activeTab, isAdmin, user]);
+    if (user && !canManageInvoiceInventory && activeTab === 'invoiceInventory') {
+      setActiveTab('ledger');
+    }
+  }, [activeTab, canManageInvoiceInventory, isAdmin, user]);
 
   useEffect(() => {
     function closeFilters() {
@@ -383,6 +387,17 @@ function App() {
     await loadData();
   }
 
+  async function deleteInvoice(id) {
+    if (!window.confirm('确认删除这条发票库存记录吗？删除后无法恢复。')) return;
+    const res = await fetch(`${API}/api/invoices/${id}?user=${encodeURIComponent(user.name)}`, { method: 'DELETE' });
+    if (!res.ok) {
+      setMessage('发票库存删除失败，请确认当前账号有权限。');
+      return;
+    }
+    setMessage('发票库存记录已删除。');
+    await loadData();
+  }
+
   async function addSupplier(event) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
@@ -552,6 +567,9 @@ function App() {
         <h1>供应商付款提醒</h1>
         <button className={activeTab === 'ledger' ? 'active' : ''} onClick={() => setActiveTab('ledger')}>供应商付款看板</button>
         <button className={activeTab === 'upload' ? 'active' : ''} onClick={() => setActiveTab('upload')}>发票上传</button>
+        {canManageInvoiceInventory && (
+          <button className={activeTab === 'invoiceInventory' ? 'active' : ''} onClick={() => setActiveTab('invoiceInventory')}>发票信息库存查看</button>
+        )}
         {isAdmin && (
           <button className={activeTab === 'suppliers' ? 'active' : ''} onClick={() => setActiveTab('suppliers')}>供应商管理维度表</button>
         )}
@@ -739,6 +757,33 @@ function App() {
                 row.status,
                 <button className="ghost" onClick={() => openPreview(row)}>查看文件</button>,
                 <div className="actions"><button onClick={() => confirmDraft(row.id)}>确认</button><button className="ghost" onClick={() => deleteDraft(row.id)}>删除</button></div>
+              ]}
+            />
+          </>
+        )}
+
+        {activeTab === 'invoiceInventory' && canManageInvoiceInventory && (
+          <>
+            <div className="section-heading-row">
+              <h2>发票信息库存查看</h2>
+              <span className="section-count">共 {invoices.length} 条</span>
+            </div>
+            <DataTable
+              className="invoice-inventory-table"
+              rows={invoices}
+              columns={['采购员', '供应商', '发票号', '金额', '开票日', '状态', 'OA流程号', '是否付款', '上传人', '文件预览', '操作']}
+              render={(row) => [
+                row.owner || findBuyerForSupplier(row.supplier) || '未匹配',
+                row.supplier,
+                row.invoiceNo,
+                `¥${Number(row.amount || 0).toLocaleString()}`,
+                row.issueDate,
+                row.status,
+                row.oaProcessNo || '',
+                row.isPaid || '未完成',
+                row.uploadedBy || row.owner || '',
+                <button className="ghost" onClick={() => openPreview(row)}>查看文件</button>,
+                <button className="danger-button" onClick={() => deleteInvoice(row.id)}>删除</button>
               ]}
             />
           </>

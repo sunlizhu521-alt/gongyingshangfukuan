@@ -29,6 +29,11 @@ button.ghost {
   color: #334155;
 }
 
+button.danger-button {
+  background: #dc2626;
+  color: white;
+}
+
 .login-shell {
   min-height: 100vh;
   display: grid;
@@ -200,6 +205,14 @@ h3 {
   margin: 0;
 }
 
+.section-heading-row h2 {
+  margin: 0;
+}
+
+.section-count {
+  color: #64748b;
+}
+
 .filter-row {
   display: flex;
   align-items: flex-end;
@@ -343,6 +356,21 @@ th {
 
 .ledger-table th:last-child,
 .ledger-table td:last-child {
+  border-right: 0;
+}
+
+.invoice-inventory-table table {
+  min-width: 1320px;
+}
+
+.invoice-inventory-table th,
+.invoice-inventory-table td {
+  border-right: 1px solid #edf1f6;
+  text-align: center;
+}
+
+.invoice-inventory-table th:last-child,
+.invoice-inventory-table td:last-child {
   border-right: 0;
 }
 

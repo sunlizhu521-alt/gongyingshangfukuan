@@ -177,6 +177,15 @@ function requireMailSettingsOwner(db, req, res) {
   return requestUser;
 }
 
+function requireInvoiceInventoryOwner(db, req, res) {
+  const requestUser = resolveRequestUser(db, { ...req.query, ...req.body });
+  if (requestUser?.name !== '孙立柱') {
+    res.status(403).json({ error: 'invoice inventory owner only' });
+    return null;
+  }
+  return requestUser;
+}
+
 function publicSettings(settings, requestUser) {
   const canSeeMailSettings = requestUser?.name === '孙立柱';
   if (!canSeeMailSettings) return {};
@@ -626,6 +635,25 @@ app.patch('/api/invoices/:id', async (req, res) => {
   });
   await saveDb(db);
   res.json(invoice);
+});
+
+app.delete('/api/invoices/:id', async (req, res) => {
+  const db = await ensureDb();
+  const requestUser = requireInvoiceInventoryOwner(db, req, res);
+  if (!requestUser) return;
+  const invoice = db.invoices.find((item) => item.id === req.params.id);
+  if (!invoice) return res.status(404).json({ error: 'not found' });
+  db.invoices = db.invoices.filter((item) => item.id !== req.params.id);
+  await removeUploadedFile(invoice.fileName);
+  db.reminders.unshift({
+    id: crypto.randomUUID(),
+    createdAt: format(new Date(), 'yyyy-MM-dd HH:mm:ss'),
+    type: '发票库存删除',
+    target: requestUser.name,
+    content: `${requestUser.name} 删除了 ${invoice.supplier} 发票 ${invoice.invoiceNo || invoice.id}。`
+  });
+  await saveDb(db);
+  res.status(204).end();
 });
 
 app.get('/api/drafts', async (req, res) => {
