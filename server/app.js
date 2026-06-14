@@ -164,6 +164,16 @@ function normalizeDb(db) {
     ...owner,
     email: owner.email || ''
   }));
+  db.qualityInspection = {
+    ...(db.qualityInspection || {}),
+    initialData: {
+      sheetName: '',
+      columns: [],
+      rows: [],
+      updatedAt: '',
+      ...(db.qualityInspection?.initialData || {})
+    }
+  };
   return db;
 }
 
@@ -641,6 +651,44 @@ function parseOwnerWorkbook(filePath) {
   return { sheetName, imported, failed };
 }
 
+function uniqueColumnName(name, index, seen) {
+  const baseName = String(name || '').trim() || `列${index + 1}`;
+  let nextName = baseName;
+  let suffix = 2;
+  while (seen.has(nextName)) {
+    nextName = `${baseName}_${suffix}`;
+    suffix += 1;
+  }
+  seen.add(nextName);
+  return nextName;
+}
+
+function parseGenericWorkbook(filePath) {
+  const workbook = xlsx.readFile(filePath, { cellDates: false });
+  const sheetName = workbook.SheetNames[0];
+  const sheet = workbook.Sheets[sheetName];
+  const rows = xlsx.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: '' });
+  const headerIndex = rows.findIndex((row) => row.some((cell) => String(cell || '').trim()));
+  if (headerIndex < 0) {
+    return { sheetName, columns: [], rows: [], importedCount: 0 };
+  }
+
+  const seen = new Set();
+  const columns = rows[headerIndex].map((cell, index) => uniqueColumnName(cell, index, seen));
+  const dataRows = rows
+    .slice(headerIndex + 1)
+    .filter((row) => row.some((cell) => String(cell || '').trim()))
+    .map((row, index) => {
+      const item = { id: crypto.randomUUID(), rowNumber: headerIndex + index + 2 };
+      columns.forEach((column, columnIndex) => {
+        item[column] = String(row[columnIndex] || '').trim();
+      });
+      return item;
+    });
+
+  return { sheetName, columns, rows: dataRows, importedCount: dataRows.length };
+}
+
 async function extractPdfText(filePath) {
   const buffer = await readFile(filePath);
   const parser = new PDFParse({ data: buffer });
@@ -1028,6 +1076,38 @@ app.post('/api/owners/import', upload.single('file'), async (req, res) => {
       imported: result.imported,
       failed: result.failed,
       owners: db.owners
+    });
+  } finally {
+    await removeUploadedFile(req.file.filename);
+  }
+});
+
+app.get('/api/quality-inspection/initial-data', async (req, res) => {
+  const db = await ensureDb();
+  if (!requirePermission(db, req, res, 'qualityInspection.inspectionInitialData')) return;
+  res.json(db.qualityInspection.initialData);
+});
+
+app.post('/api/quality-inspection/initial-data/import', upload.single('file'), async (req, res) => {
+  const db = await ensureDb();
+  if (!req.file) return res.status(400).json({ error: 'missing file' });
+  if (!requirePermission(db, req, res, 'qualityInspection.inspectionInitialData')) {
+    await removeUploadedFile(req.file.filename);
+    return;
+  }
+
+  try {
+    const result = parseGenericWorkbook(req.file.path);
+    db.qualityInspection.initialData = {
+      sheetName: result.sheetName,
+      columns: result.columns,
+      rows: result.rows,
+      updatedAt: format(new Date(), 'yyyy-MM-dd HH:mm:ss')
+    };
+    await saveDb(db);
+    res.json({
+      ...db.qualityInspection.initialData,
+      importedCount: result.importedCount
     });
   } finally {
     await removeUploadedFile(req.file.filename);

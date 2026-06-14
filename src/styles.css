@@ -454,6 +454,20 @@ h3 {
   max-height: 285px;
 }
 
+.inspection-initial-table {
+  max-height: 520px;
+}
+
+.single-management-panel {
+  display: grid;
+  gap: 14px;
+  max-width: 100%;
+}
+
+.single-management-panel h3 {
+  margin-top: 0;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;

@@ -31,6 +31,8 @@ function App() {
   const [activeMenuGroup, setActiveMenuGroup] = useState('supplierPayment');
   const [supplierImportResult, setSupplierImportResult] = useState(null);
   const [ownerImportResult, setOwnerImportResult] = useState(null);
+  const [inspectionInitialData, setInspectionInitialData] = useState({ sheetName: '', columns: [], rows: [], updatedAt: '' });
+  const [inspectionInitialImportResult, setInspectionInitialImportResult] = useState(null);
   const [dimensionShortNameFilter, setDimensionShortNameFilter] = useState([]);
   const [dimensionOwnerFilter, setDimensionOwnerFilter] = useState([]);
   const [dimensionAnnualFilter, setDimensionAnnualFilter] = useState([]);
@@ -126,14 +128,15 @@ function App() {
 
   async function loadData() {
     const params = user ? `?user=${encodeURIComponent(user.name)}&role=${encodeURIComponent(user.role)}` : '';
-    const [invoiceRes, draftRes, supplierRes, ownerRes, reminderRes, settingsRes, usersRes] = await Promise.all([
+    const [invoiceRes, draftRes, supplierRes, ownerRes, reminderRes, settingsRes, usersRes, inspectionInitialRes] = await Promise.all([
       fetch(`${API}/api/invoices${params}`),
       fetch(`${API}/api/drafts${params}`),
       fetch(`${API}/api/suppliers`),
       fetch(`${API}/api/owners`),
       fetch(`${API}/api/reminders${params}`),
       fetch(`${API}/api/settings${params}`),
-      canManagePermissions ? fetch(`${API}/api/users${params}`) : Promise.resolve(null)
+      canManagePermissions ? fetch(`${API}/api/users${params}`) : Promise.resolve(null),
+      canAccessTab('inspectionInitialData') ? fetch(`${API}/api/quality-inspection/initial-data${params}`) : Promise.resolve(null)
     ]);
     setInvoices(await invoiceRes.json());
     setDrafts(await draftRes.json());
@@ -149,6 +152,11 @@ function App() {
       setManagedUsers(await usersRes.json());
     } else if (!canManagePermissions) {
       setManagedUsers([]);
+    }
+    if (inspectionInitialRes?.ok) {
+      setInspectionInitialData(await inspectionInitialRes.json());
+    } else if (!canAccessTab('inspectionInitialData')) {
+      setInspectionInitialData({ sheetName: '', columns: [], rows: [], updatedAt: '' });
     }
   }
 
@@ -353,6 +361,9 @@ function App() {
   const dimensionAnnualOptions = useMemo(() => {
     return uniqueValueOptions(suppliers.map((supplier) => supplier.hasAnnualFrame));
   }, [suppliers]);
+  const inspectionInitialColumns = useMemo(() => {
+    return inspectionInitialData.columns?.length ? inspectionInitialData.columns : ['暂无字段'];
+  }, [inspectionInitialData.columns]);
   const filteredAppliedDimensionRows = useMemo(() => {
     return appliedDimensionRows.filter((row) =>
       (dimensionShortNameFilter.length === 0 || dimensionShortNameFilter.includes(row.shortName)) &&
@@ -545,6 +556,23 @@ function App() {
     setOwners(result.owners || []);
     setOwnerImportResult(result);
     setMessage(`采购负责人维度表已读取：成功 ${result.importedCount} 行，失败 ${result.failedCount} 行。`);
+  }
+
+  async function uploadInspectionInitialData(files) {
+    const file = files?.[0];
+    if (!file) return;
+    const form = new FormData();
+    form.append('file', file);
+    form.append('user', user.name);
+    const res = await fetch(`${API}/api/quality-inspection/initial-data/import`, { method: 'POST', body: form });
+    if (!res.ok) {
+      setMessage('验货信息初始数据导入失败，请检查文件格式。');
+      return;
+    }
+    const result = await res.json();
+    setInspectionInitialData(result);
+    setInspectionInitialImportResult(result);
+    setMessage(`验货信息初始数据已读取：成功 ${result.importedCount || 0} 行。`);
   }
 
   function downloadImportResult(type, result) {
@@ -1293,7 +1321,45 @@ function App() {
           </>
         )}
 
-        {qualityInspectionPages[activeTab] && canAccessTab(activeTab) && (
+        {activeTab === 'inspectionInitialData' && canAccessTab('inspectionInitialData') && (
+          <>
+            <div className="section-heading-row">
+              <h2>验货信息初始数据</h2>
+              <span className="section-count">共 {inspectionInitialData.rows?.length || 0} 行</span>
+            </div>
+            <section className="single-management-panel">
+              <h3>验货信息初始数据</h3>
+              <label
+                className="mini-drop-zone"
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => { event.preventDefault(); uploadInspectionInitialData(event.dataTransfer.files); }}
+              >
+                <input
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  onChange={(event) => uploadInspectionInitialData(event.target.files)}
+                />
+                <span>点击或拖拽上传验货信息初始数据</span>
+              </label>
+              {(inspectionInitialImportResult || inspectionInitialData.updatedAt) && (
+                <div className="import-summary">
+                  <strong>读取结果</strong>
+                  <span>工作表：{inspectionInitialData.sheetName || inspectionInitialImportResult?.sheetName || '未识别'}</span>
+                  <span>成功 {inspectionInitialImportResult?.importedCount ?? inspectionInitialData.rows?.length ?? 0} 行</span>
+                  {inspectionInitialData.updatedAt && <span>更新时间：{inspectionInitialData.updatedAt}</span>}
+                </div>
+              )}
+              <DataTable
+                className="inspection-initial-table"
+                rows={inspectionInitialData.rows || []}
+                columns={inspectionInitialColumns}
+                render={(row) => inspectionInitialColumns.map((column) => row[column] || '')}
+              />
+            </section>
+          </>
+        )}
+
+        {qualityInspectionPages[activeTab] && activeTab !== 'inspectionInitialData' && canAccessTab(activeTab) && (
           <section className="placeholder-panel">
             <h2>{qualityInspectionPages[activeTab]}</h2>
             <p>当前页面已建立入口，具体业务内容待配置。</p>
