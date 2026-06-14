@@ -25,6 +25,23 @@ const INSPECTION_NOTICE_FIELDS = [
 
 const INSPECTION_DEPARTMENT_OPTIONS = ['海外事业部一部', '海外事业二部', '国内事业部', '全球招商部', '其他部门'];
 
+const SALES_INVENTORY_PAGES = [
+  { tab: 'salesInventoryReceiptSummary', key: 'receiptSummary', label: '供应链库存分析', sourceFile: 'receipt-summary.html' },
+  { tab: 'salesInventorySalesAnalysis', key: 'salesAnalysis', label: '销售数据分析', sourceFile: 'sales-analysis.html' },
+  { tab: 'salesInventoryComparison', key: 'comparison', label: '表格对比分析', sourceFile: 'comparison.html' },
+  { tab: 'salesInventoryFactLibrary', key: 'factLibrary', label: '库存数据文件', sourceFile: 'fact-library.html' },
+  { tab: 'salesInventorySalesLibrary', key: 'salesLibrary', label: '销售数据文件', sourceFile: 'sales-library.html' },
+  { tab: 'salesInventoryFileLibrary', key: 'fileLibrary', label: '维度表文件库', sourceFile: 'file-library.html' },
+  { tab: 'salesInventoryErrors', key: 'errors', label: '报错信息提示', sourceFile: 'errors.html' },
+  { tab: 'salesInventoryTrendTemplate', key: 'inventoryTrendTemplate', label: '库存货值-模板', sourceFile: 'inventory-trend.html' },
+  { tab: 'salesInventoryOver120Template', key: 'over120Template', label: '120天以上库存导航-模板', sourceFile: 'over-120.html' },
+  { tab: 'salesInventoryStaticReport', key: 'staticReport', label: '静态汇报页', sourceFile: 'inventory-static-report.html' },
+  { tab: 'salesInventoryOverseasReport', key: 'overseasReport', label: '海外事业部报告', sourceFile: 'overseas-report.html' },
+  { tab: 'salesInventoryOverseasSecondReport', key: 'overseasSecondReport', label: '海外事业二部报告', sourceFile: 'overseas-second-report.html' },
+  { tab: 'salesInventoryDomesticReport', key: 'domesticReport', label: '国内事业部报告', sourceFile: 'domestic-report.html' },
+  { tab: 'salesInventoryGlobalBusinessReport', key: 'globalBusinessReport', label: '全球招商部报告', sourceFile: 'global-business-report.html' }
+];
+
 function createInspectionNoticeRow(values = {}) {
   return INSPECTION_NOTICE_FIELDS.reduce((row, field) => ({
     ...row,
@@ -103,7 +120,11 @@ function App() {
     {
       value: 'salesInventory',
       label: '销售及库存看板',
-      children: []
+      children: SALES_INVENTORY_PAGES.map((page) => ({
+        value: `salesInventory.${page.key}`,
+        tab: page.tab,
+        label: page.label
+      }))
     },
     {
       value: 'systemManagement',
@@ -130,6 +151,7 @@ function App() {
     'qualityInspection.inspectionReportQuery': ['qualityInspection'],
     'qualityInspection.inspectionSummary': ['qualityInspection'],
     'qualityInspection.inspectionInitialData': ['qualityInspection'],
+    ...Object.fromEntries(SALES_INVENTORY_PAGES.map((page) => [`salesInventory.${page.key}`, ['salesInventory']])),
     'systemManagement.permissionManagement': ['permissionManagement']
   };
   function hasPermission(permission) {
@@ -164,6 +186,7 @@ function App() {
     inspectionSummary: '验货信息汇总表',
     inspectionInitialData: '验货信息初始数据'
   };
+  const salesInventoryPageMap = Object.fromEntries(SALES_INVENTORY_PAGES.map((page) => [page.tab, page]));
 
   function openMenuTab(tab, group) {
     setActiveMenuGroup(group);
@@ -1060,6 +1083,19 @@ function App() {
               销售及库存看板
               <span>{activeMenuGroup === 'salesInventory' ? '▾' : '▸'}</span>
             </button>
+            {activeMenuGroup === 'salesInventory' && (
+              <div className="submenu-list">
+                {SALES_INVENTORY_PAGES.filter((page) => canAccessTab(page.tab)).map((page) => (
+                  <button
+                    key={page.tab}
+                    className={activeTab === page.tab ? 'active' : ''}
+                    onClick={() => openMenuTab(page.tab, 'salesInventory')}
+                  >
+                    {page.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           )}
           {canManagePermissions && (
@@ -1688,6 +1724,14 @@ function App() {
           <section className="placeholder-panel">
             <h2>{qualityInspectionPages[activeTab]}</h2>
             <p>当前页面已建立入口，具体业务内容待配置。</p>
+          </section>
+        )}
+
+        {salesInventoryPageMap[activeTab] && canAccessTab(activeTab) && (
+          <section className="placeholder-panel">
+            <h2>{salesInventoryPageMap[activeTab].label}</h2>
+            <p>已作为销售及库存看板三级菜单添加，原库存分析看板项目内容保持不变。</p>
+            <p>来源页面：{salesInventoryPageMap[activeTab].sourceFile}</p>
           </section>
         )}
       </section>

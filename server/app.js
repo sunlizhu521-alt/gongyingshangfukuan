@@ -25,6 +25,22 @@ const SYSTEM_OWNER_NAME = '孙立柱';
 const ROLE_ADMIN = '管理员';
 const ROLE_FINANCE = '财务';
 const ROLE_USER = '普通用户';
+const SALES_INVENTORY_PERMISSIONS = [
+  'salesInventory.receiptSummary',
+  'salesInventory.salesAnalysis',
+  'salesInventory.comparison',
+  'salesInventory.factLibrary',
+  'salesInventory.salesLibrary',
+  'salesInventory.fileLibrary',
+  'salesInventory.errors',
+  'salesInventory.inventoryTrendTemplate',
+  'salesInventory.over120Template',
+  'salesInventory.staticReport',
+  'salesInventory.overseasReport',
+  'salesInventory.overseasSecondReport',
+  'salesInventory.domesticReport',
+  'salesInventory.globalBusinessReport'
+];
 const PERMISSION_GROUPS = [
   {
     value: 'supplierPayment',
@@ -50,7 +66,7 @@ const PERMISSION_GROUPS = [
   },
   {
     value: 'salesInventory',
-    children: []
+    children: SALES_INVENTORY_PERMISSIONS
   },
   {
     value: 'systemManagement',
@@ -69,6 +85,7 @@ function expandPermissionKey(permission) {
     const group = PERMISSION_GROUPS.find((item) => item.value === 'qualityInspection');
     return [group.value, ...group.children];
   }
+  if (permission === 'salesInventory') return ['salesInventory', ...SALES_INVENTORY_PERMISSIONS];
   if (permission === 'permissionManagement') return ['systemManagement', 'systemManagement.permissionManagement'];
   if (permission === 'systemManagement') return ['systemManagement', 'systemManagement.permissionManagement'];
   const group = PERMISSION_GROUPS.find((item) => item.children.includes(permission));
