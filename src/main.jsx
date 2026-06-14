@@ -38,22 +38,74 @@ function App() {
   const [newUserName, setNewUserName] = useState('');
   const [newUserPassword, setNewUserPassword] = useState('123456');
   const systemOwnerName = '孙立柱';
-  const permissionOptions = [
-    { value: 'supplierPayment', label: '供应商付款提醒' },
-    { value: 'invoiceInventory', label: '发票信息库存查看' },
-    { value: 'supplierManagement', label: '供应商管理维度表' },
-    { value: 'qualityInspection', label: '品质验货' }
+  const permissionGroups = [
+    {
+      value: 'supplierPayment',
+      label: '供应商付款提醒',
+      children: [
+        { value: 'supplierPayment.ledger', tab: 'ledger', label: '供应商付款看板' },
+        { value: 'supplierPayment.upload', tab: 'upload', label: '发票上传' },
+        { value: 'supplierPayment.invoiceInventory', tab: 'invoiceInventory', label: '发票信息库存查看' },
+        { value: 'supplierPayment.supplierManagement', tab: 'suppliers', label: '供应商管理维度表' },
+        { value: 'supplierPayment.reminders', tab: 'reminders', label: '操作日志' }
+      ]
+    },
+    {
+      value: 'qualityInspection',
+      label: '品质验货',
+      children: [
+        { value: 'qualityInspection.inspectionNotice', tab: 'inspectionNotice', label: '验货通知' },
+        { value: 'qualityInspection.inspectionSchedule', tab: 'inspectionSchedule', label: '验货安排' },
+        { value: 'qualityInspection.inspectionFeedback', tab: 'inspectionFeedback', label: '验货反馈' },
+        { value: 'qualityInspection.inspectionReportQuery', tab: 'inspectionReportQuery', label: '检验报告单查询' }
+      ]
+    },
+    {
+      value: 'systemManagement',
+      label: '系统管理',
+      fixedOwnerOnly: true,
+      children: [
+        { value: 'systemManagement.permissionManagement', tab: 'permissionManagement', label: '权限管理' }
+      ]
+    }
   ];
+  const tabPermissionMap = Object.fromEntries(
+    permissionGroups.flatMap((group) => group.children.map((item) => [item.tab, item.value]))
+  );
+  const legacyPermissionMap = {
+    'supplierPayment.ledger': ['supplierPayment'],
+    'supplierPayment.upload': ['supplierPayment'],
+    'supplierPayment.reminders': ['supplierPayment'],
+    'supplierPayment.invoiceInventory': ['invoiceInventory'],
+    'supplierPayment.supplierManagement': ['supplierManagement'],
+    'qualityInspection.inspectionNotice': ['qualityInspection'],
+    'qualityInspection.inspectionSchedule': ['qualityInspection'],
+    'qualityInspection.inspectionFeedback': ['qualityInspection'],
+    'qualityInspection.inspectionReportQuery': ['qualityInspection'],
+    'systemManagement.permissionManagement': ['permissionManagement']
+  };
   function hasPermission(permission) {
     if (user?.name === systemOwnerName) return true;
-    return Array.isArray(user?.permissions) && user.permissions.includes(permission);
+    const permissions = Array.isArray(user?.permissions) ? user.permissions : [];
+    if (permissions.includes(permission)) return true;
+    return (legacyPermissionMap[permission] || []).some((item) => permissions.includes(item));
+  }
+  function canAccessTab(tab) {
+    if (tab === 'permissionManagement') return canManagePermissions;
+    const permission = tabPermissionMap[tab];
+    return permission ? hasPermission(permission) : false;
+  }
+  function canAccessGroup(groupValue) {
+    const group = permissionGroups.find((item) => item.value === groupValue);
+    if (!group) return false;
+    return hasPermission(group.value) || group.children.some((item) => canAccessTab(item.tab));
   }
   const canManageMailSettings = user?.name === systemOwnerName;
   const canManagePermissions = user?.name === systemOwnerName;
-  const canAccessSupplierPayment = hasPermission('supplierPayment');
-  const canManageInvoiceInventory = hasPermission('invoiceInventory');
-  const canManageSuppliers = hasPermission('supplierManagement');
-  const canAccessQualityInspection = hasPermission('qualityInspection');
+  const canAccessSupplierPayment = canAccessGroup('supplierPayment');
+  const canManageInvoiceInventory = canAccessTab('invoiceInventory');
+  const canManageSuppliers = canAccessTab('suppliers');
+  const canAccessQualityInspection = canAccessGroup('qualityInspection');
   const qualityInspectionPages = {
     inspectionNotice: '验货通知',
     inspectionSchedule: '验货安排',
@@ -100,30 +152,15 @@ function App() {
 
   useEffect(() => {
     function openFirstAllowedTab() {
-      if (canAccessSupplierPayment) {
-        setActiveMenuGroup('supplierPayment');
-        setActiveTab('ledger');
-      } else if (canAccessQualityInspection) {
-        setActiveMenuGroup('qualityInspection');
-        setActiveTab('inspectionNotice');
-      } else if (canManagePermissions) {
-        setActiveMenuGroup('systemManagement');
-        setActiveTab('permissionManagement');
+      const firstAllowed = permissionGroups
+        .flatMap((group) => group.children.map((child) => ({ ...child, group: group.value })))
+        .find((item) => canAccessTab(item.tab));
+      if (firstAllowed) {
+        setActiveMenuGroup(firstAllowed.group);
+        setActiveTab(firstAllowed.tab);
       }
     }
-    if (user && !canAccessSupplierPayment && ['ledger', 'upload', 'reminders'].includes(activeTab)) {
-      openFirstAllowedTab();
-      return;
-    }
-    if (user && !canManageSuppliers && activeTab === 'suppliers') {
-      openFirstAllowedTab();
-      return;
-    }
-    if (user && !canManageInvoiceInventory && activeTab === 'invoiceInventory') {
-      openFirstAllowedTab();
-      return;
-    }
-    if (user && !canAccessQualityInspection && qualityInspectionPages[activeTab]) {
+    if (user && tabPermissionMap[activeTab] && !canAccessTab(activeTab)) {
       openFirstAllowedTab();
       return;
     }
@@ -602,7 +639,7 @@ function App() {
         name,
         password: newUserPassword || '123456',
         role: '普通用户',
-        permissions: ['supplierPayment']
+        permissions: ['supplierPayment', 'supplierPayment.ledger', 'supplierPayment.upload', 'supplierPayment.reminders']
       })
     });
     if (!res.ok) {
@@ -630,12 +667,45 @@ function App() {
     setMessage('权限已保存。');
   }
 
-  function toggleManagedPermission(target, permission) {
-    const permissions = Array.isArray(target.permissions) ? target.permissions : [];
-    const nextPermissions = permissions.includes(permission)
-      ? permissions.filter((item) => item !== permission)
-      : [...permissions, permission];
-    updateManagedUser(target, { permissions: nextPermissions });
+  function managedPermissionSet(target) {
+    return new Set(Array.isArray(target.permissions) ? target.permissions : []);
+  }
+
+  function isManagedPermissionChecked(target, permission) {
+    if (target.name === systemOwnerName) return true;
+    return managedPermissionSet(target).has(permission);
+  }
+
+  function toggleManagedGroup(target, group) {
+    if (target.name === systemOwnerName || group.fixedOwnerOnly) return;
+    const permissions = managedPermissionSet(target);
+    const children = group.children.map((item) => item.value);
+    const allChecked = children.every((item) => permissions.has(item));
+    if (allChecked) {
+      permissions.delete(group.value);
+      children.forEach((item) => permissions.delete(item));
+    } else {
+      permissions.add(group.value);
+      children.forEach((item) => permissions.add(item));
+    }
+    updateManagedUser(target, { permissions: [...permissions] });
+  }
+
+  function toggleManagedPermission(target, group, permission) {
+    if (target.name === systemOwnerName || group.fixedOwnerOnly) return;
+    const permissions = managedPermissionSet(target);
+    if (permissions.has(permission)) {
+      permissions.delete(permission);
+    } else {
+      permissions.add(permission);
+    }
+    const hasAnyChild = group.children.some((item) => permissions.has(item.value));
+    if (hasAnyChild) {
+      permissions.add(group.value);
+    } else {
+      permissions.delete(group.value);
+    }
+    updateManagedUser(target, { permissions: [...permissions] });
   }
 
   function openPreview(row) {
@@ -690,15 +760,21 @@ function App() {
             </button>
             {activeMenuGroup === 'supplierPayment' && (
               <div className="submenu-list">
-                <button className={activeTab === 'ledger' ? 'active' : ''} onClick={() => openMenuTab('ledger', 'supplierPayment')}>供应商付款看板</button>
-                <button className={activeTab === 'upload' ? 'active' : ''} onClick={() => openMenuTab('upload', 'supplierPayment')}>发票上传</button>
+                {canAccessTab('ledger') && (
+                  <button className={activeTab === 'ledger' ? 'active' : ''} onClick={() => openMenuTab('ledger', 'supplierPayment')}>供应商付款看板</button>
+                )}
+                {canAccessTab('upload') && (
+                  <button className={activeTab === 'upload' ? 'active' : ''} onClick={() => openMenuTab('upload', 'supplierPayment')}>发票上传</button>
+                )}
                 {canManageInvoiceInventory && (
                   <button className={activeTab === 'invoiceInventory' ? 'active' : ''} onClick={() => openMenuTab('invoiceInventory', 'supplierPayment')}>发票信息库存查看</button>
                 )}
                 {canManageSuppliers && (
                   <button className={activeTab === 'suppliers' ? 'active' : ''} onClick={() => openMenuTab('suppliers', 'supplierPayment')}>供应商管理维度表</button>
                 )}
-                <button className={activeTab === 'reminders' ? 'active' : ''} onClick={() => openMenuTab('reminders', 'supplierPayment')}>操作日志</button>
+                {canAccessTab('reminders') && (
+                  <button className={activeTab === 'reminders' ? 'active' : ''} onClick={() => openMenuTab('reminders', 'supplierPayment')}>操作日志</button>
+                )}
               </div>
             )}
           </div>
@@ -716,10 +792,18 @@ function App() {
             </button>
             {activeMenuGroup === 'qualityInspection' && (
               <div className="submenu-list">
-                <button className={activeTab === 'inspectionNotice' ? 'active' : ''} onClick={() => openMenuTab('inspectionNotice', 'qualityInspection')}>验货通知</button>
-                <button className={activeTab === 'inspectionSchedule' ? 'active' : ''} onClick={() => openMenuTab('inspectionSchedule', 'qualityInspection')}>验货安排</button>
-                <button className={activeTab === 'inspectionFeedback' ? 'active' : ''} onClick={() => openMenuTab('inspectionFeedback', 'qualityInspection')}>验货反馈</button>
-                <button className={activeTab === 'inspectionReportQuery' ? 'active' : ''} onClick={() => openMenuTab('inspectionReportQuery', 'qualityInspection')}>检验报告单查询</button>
+                {canAccessTab('inspectionNotice') && (
+                  <button className={activeTab === 'inspectionNotice' ? 'active' : ''} onClick={() => openMenuTab('inspectionNotice', 'qualityInspection')}>验货通知</button>
+                )}
+                {canAccessTab('inspectionSchedule') && (
+                  <button className={activeTab === 'inspectionSchedule' ? 'active' : ''} onClick={() => openMenuTab('inspectionSchedule', 'qualityInspection')}>验货安排</button>
+                )}
+                {canAccessTab('inspectionFeedback') && (
+                  <button className={activeTab === 'inspectionFeedback' ? 'active' : ''} onClick={() => openMenuTab('inspectionFeedback', 'qualityInspection')}>验货反馈</button>
+                )}
+                {canAccessTab('inspectionReportQuery') && (
+                  <button className={activeTab === 'inspectionReportQuery' ? 'active' : ''} onClick={() => openMenuTab('inspectionReportQuery', 'qualityInspection')}>检验报告单查询</button>
+                )}
               </div>
             )}
           </div>
@@ -778,7 +862,7 @@ function App() {
 
       <section className="content">
         {message && <div className="toast">{message}</div>}
-        {activeTab === 'ledger' && canAccessSupplierPayment && (
+        {activeTab === 'ledger' && canAccessTab('ledger') && (
           <>
             <div className="toolbar">
               <div className="board-heading-row">
@@ -903,7 +987,7 @@ function App() {
           </>
         )}
 
-        {activeTab === 'upload' && canAccessSupplierPayment && (
+        {activeTab === 'upload' && canAccessTab('upload') && (
           <>
             <h2>发票上传</h2>
             <label
@@ -931,7 +1015,7 @@ function App() {
           </>
         )}
 
-        {activeTab === 'invoiceInventory' && canManageInvoiceInventory && (
+        {activeTab === 'invoiceInventory' && canAccessTab('invoiceInventory') && (
           <>
             <div className="section-heading-row">
               <h2>发票信息库存查看</h2>
@@ -958,7 +1042,7 @@ function App() {
           </>
         )}
 
-        {activeTab === 'suppliers' && canManageSuppliers && (
+        {activeTab === 'suppliers' && canAccessTab('suppliers') && (
           <>
             <h2>供应商管理维度表</h2>
             <div className="metric-grid">
@@ -1094,7 +1178,7 @@ function App() {
           </>
         )}
 
-        {activeTab === 'reminders' && canAccessSupplierPayment && (
+        {activeTab === 'reminders' && canAccessTab('reminders') && (
           <>
             <h2>操作日志</h2>
             <DataTable
@@ -1142,18 +1226,39 @@ function App() {
                     <option value="财务">财务</option>
                   </select>
                 ),
-                <div className="permission-checks">
-                  {permissionOptions.map((option) => (
-                    <label key={option.value}>
-                      <input
-                        type="checkbox"
-                        checked={row.name === systemOwnerName || (row.permissions || []).includes(option.value)}
-                        disabled={row.name === systemOwnerName}
-                        onChange={() => toggleManagedPermission(row, option.value)}
-                      />
-                      {option.label}
-                    </label>
-                  ))}
+                <div className="permission-tree">
+                  {permissionGroups.map((group) => {
+                    const groupDisabled = row.name === systemOwnerName || group.fixedOwnerOnly;
+                    const childValues = group.children.map((item) => item.value);
+                    const groupChecked = row.name === systemOwnerName || childValues.every((item) => isManagedPermissionChecked(row, item));
+                    return (
+                      <div className="permission-group-block" key={group.value}>
+                        <label className="permission-group-label">
+                          <input
+                            type="checkbox"
+                            checked={groupChecked}
+                            disabled={groupDisabled}
+                            onChange={() => toggleManagedGroup(row, group)}
+                          />
+                          <span>{group.label}</span>
+                          {group.fixedOwnerOnly && row.name !== systemOwnerName && <em>仅管理员</em>}
+                        </label>
+                        <div className="permission-child-list">
+                          {group.children.map((option) => (
+                            <label key={option.value}>
+                              <input
+                                type="checkbox"
+                                checked={isManagedPermissionChecked(row, option.value)}
+                                disabled={groupDisabled}
+                                onChange={() => toggleManagedPermission(row, group, option.value)}
+                              />
+                              {option.label}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>,
                 row.name === systemOwnerName ? (
                   <span>固定管理员</span>
@@ -1176,7 +1281,7 @@ function App() {
           </>
         )}
 
-        {canAccessQualityInspection && qualityInspectionPages[activeTab] && (
+        {qualityInspectionPages[activeTab] && canAccessTab(activeTab) && (
           <section className="placeholder-panel">
             <h2>{qualityInspectionPages[activeTab]}</h2>
             <p>当前页面已建立入口，具体业务内容待配置。</p>

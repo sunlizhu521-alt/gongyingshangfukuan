@@ -236,6 +236,55 @@ select {
   accent-color: #2563eb;
 }
 
+.permission-tree {
+  display: grid;
+  gap: 10px;
+  text-align: left;
+}
+
+.permission-group-block {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #f8fafc;
+}
+
+.permission-group-label,
+.permission-child-list label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.permission-group-label {
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.permission-group-label em {
+  font-style: normal;
+  font-weight: 500;
+  color: #94a3b8;
+}
+
+.permission-child-list {
+  display: flex;
+  gap: 10px;
+  padding-left: 22px;
+  flex-wrap: wrap;
+}
+
+.permission-tree input {
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  accent-color: #2563eb;
+}
+
 .sidebar .sender-email-form button {
   text-align: center;
   background: #2563eb;
