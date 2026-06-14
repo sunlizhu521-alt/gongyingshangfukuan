@@ -11,7 +11,7 @@ const INSPECTION_NOTICE_FIELDS = [
   { key: 'supplierFinishTime', label: '供应商完工时间', inputType: 'date' },
   { key: 'shipmentTime', label: '发货时间', inputType: 'date' },
   { key: 'kingdeeOrderNo', label: '金蝶采购订单' },
-  { key: 'supplierShortName', label: '供应商简称' },
+  { key: 'supplierShortName', label: '供应商简称', select: true },
   { key: 'supplierAddress', label: '供应商地址', readonly: true },
   { key: 'businessDepartments', label: '事业部', multiSelect: true },
   { key: 'operation', label: '运营' },
@@ -428,6 +428,9 @@ function App() {
       };
     });
   }, [ownerBySupplier, suppliers]);
+  const inspectionSupplierShortNameOptions = useMemo(() => {
+    return uniqueValueOptions(appliedDimensionRows.map((row) => row.shortName));
+  }, [appliedDimensionRows]);
   const dimensionShortNameOptions = useMemo(() => {
     return uniqueValueOptions(suppliers.map((supplier) => supplier.shortName));
   }, [suppliers]);
@@ -1540,6 +1543,24 @@ function App() {
                           </label>
                         ))}
                       </div>
+                    );
+                  }
+                  if (field.select && field.key === 'supplierShortName') {
+                    const hasCurrentValue = row[field.key] && !inspectionSupplierShortNameOptions.some((option) => option.value === row[field.key]);
+                    const options = hasCurrentValue
+                      ? [{ value: row[field.key], label: row[field.key] }, ...inspectionSupplierShortNameOptions]
+                      : inspectionSupplierShortNameOptions;
+                    return (
+                      <select
+                        className="table-input inspection-notice-input"
+                        value={row[field.key] || ''}
+                        onChange={(event) => updateInspectionNoticeRow(row.id, field.key, event.target.value)}
+                      >
+                        <option value="">请选择供应商简称</option>
+                        {options.map((option) => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
                     );
                   }
                   return field.multiline ? (
