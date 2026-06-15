@@ -1555,12 +1555,26 @@ app.patch('/api/settings', async (req, res) => {
   res.json(publicSettingsForUser(db.settings, requestUser));
 });
 
-function publicKcfxLibrary(db) {
+function stripKcfxRecordRows(record = {}) {
+  const { rows, ...metadata } = record || {};
+  return {
+    ...metadata,
+    rowCount: Array.isArray(rows) ? rows.length : Number(record.rowCount || 0),
+    hasRows: Array.isArray(rows)
+  };
+}
+
+function publicKcfxLibrary(db, options = {}) {
+  const includeRows = Boolean(options.includeRows);
+  const records = db.kcfxLibrary?.records || {};
   return {
     schemaVersion: db.kcfxLibrary?.schemaVersion || 1,
     project: 'kcfx',
     savedAt: db.kcfxLibrary?.savedAt || '',
-    records: db.kcfxLibrary?.records || {}
+    records: Object.fromEntries(Object.entries(records).map(([id, record]) => [
+      id,
+      includeRows ? record : stripKcfxRecordRows(record)
+    ]))
   };
 }
 
@@ -1968,7 +1982,15 @@ async function parseKcfxStoredFile({ id, slot, file, storedFile, previousRecord,
 
 app.get('/api/kcfx-library', async (req, res) => {
   const db = await ensureDb();
-  res.json(publicKcfxLibrary(db));
+  res.json(publicKcfxLibrary(db, { includeRows: req.query.includeRows === '1' }));
+});
+
+app.get('/api/kcfx-library/records/:id', async (req, res) => {
+  const db = await ensureDb();
+  const id = String(req.params.id || '').trim();
+  const record = db.kcfxLibrary.records[id];
+  if (!record) return res.status(404).json({ error: 'record not found' });
+  res.json({ ok: true, record });
 });
 
 app.post('/api/kcfx-library/records/:id/upload', upload.single('file'), async (req, res) => {

@@ -45,6 +45,7 @@ function startInitialLibrarySync() {
   setLibraryLoadProgress(8, "正在读取服务器文件库...");
   loadSharedLibrary({
     statusEl: $("#sharedStatus"),
+    metadataOnly: true,
     onProgress: ({ percent, message }) => setLibraryLoadProgress(percent, message)
   })
     .then(() => {
@@ -120,7 +121,7 @@ async function uploadAllToServer() {
       uploaded += 1;
       setLibraryStatus(`正在上传到腾讯云服务器：${uploaded}/${uploadableSlots.length}`);
     }
-    await loadSharedLibrary({ statusEl: $("#sharedStatus"), force: true });
+    await loadSharedLibrary({ statusEl: $("#sharedStatus"), force: true, metadataOnly: true });
     await renderLibrary();
     if (queued) {
       scheduleServerParseRefresh();
@@ -146,7 +147,7 @@ function scheduleServerParseRefresh() {
   window.clearTimeout(serverParseRefreshTimer);
   serverParseRefreshTimer = window.setTimeout(async () => {
     serverParseRefreshCount += 1;
-    const result = await loadSharedLibrary({ statusEl: $("#sharedStatus"), force: true }).catch(() => null);
+    const result = await loadSharedLibrary({ statusEl: $("#sharedStatus"), force: true, metadataOnly: true }).catch(() => null);
     await renderLibrary();
     const records = result?.manifest?.records || {};
     if (serverParseRefreshCount < 8 && shouldWaitForServerParse(records)) {
@@ -162,6 +163,7 @@ async function refreshAll() {
   await loadSharedLibrary({
     statusEl: $("#sharedStatus"),
     force: true,
+    metadataOnly: true,
     onProgress: ({ percent, message }) => setLibraryLoadProgress(percent, message)
   });
   setLibraryLoadProgress(92, "正在应用文件槽位...");

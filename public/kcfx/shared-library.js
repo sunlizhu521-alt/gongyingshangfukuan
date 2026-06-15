@@ -3,7 +3,7 @@ const KC_SERVER_LIBRARY_API = `${resolveKcfxApiBase()}/api/kcfx-library`;
 const KC_SYSTEM_OWNER_NAME = "孙立柱";
 const KC_SERVER_LOAD_TIMEOUT_MS = 15000;
 const KC_SERVER_UPLOAD_TIMEOUT_MS = 10 * 60 * 1000;
-let kcSharedLibraryLoadPromise = null;
+const kcSharedLibraryLoadPromises = new Map();
 
 function resolveKcfxApiBase() {
   const { hostname, port } = window.location;
@@ -34,9 +34,13 @@ async function fetchKcfxApi(url, options = {}, timeoutMs = KC_SERVER_LOAD_TIMEOU
 async function loadSharedLibrary(options = {}) {
   const statusEl = options.statusEl || null;
   const onProgress = typeof options.onProgress === "function" ? options.onProgress : null;
-  if (options.force) kcSharedLibraryLoadPromise = null;
-  if (!kcSharedLibraryLoadPromise) kcSharedLibraryLoadPromise = loadKcfxFileLibrary(null, { onProgress });
-  const result = await kcSharedLibraryLoadPromise;
+  const metadataOnly = Boolean(options.metadataOnly);
+  const promiseKey = metadataOnly ? "metadata" : "full";
+  if (options.force) kcSharedLibraryLoadPromises.delete(promiseKey);
+  if (!kcSharedLibraryLoadPromises.has(promiseKey)) {
+    kcSharedLibraryLoadPromises.set(promiseKey, loadKcfxFileLibrary(null, { onProgress, metadataOnly }));
+  }
+  const result = await kcSharedLibraryLoadPromises.get(promiseKey);
   if (statusEl) renderSharedLibraryStatus(statusEl, result);
   return result;
 }
@@ -53,8 +57,9 @@ function renderSharedLibraryStatus(statusEl, result) {
 async function loadKcfxFileLibrary(statusEl, options = {}) {
   const cacheKey = `v=${Date.now()}`;
   const onProgress = typeof options.onProgress === "function" ? options.onProgress : null;
+  const metadataOnly = Boolean(options.metadataOnly);
   onProgress?.({ percent: 12, message: "正在连接服务器文件库..." });
-  const serverResult = await loadServerKcfxFileLibrary(statusEl, { onProgress });
+  const serverResult = await loadServerKcfxFileLibrary(statusEl, { onProgress, metadataOnly });
   if (serverResult.ok) return serverResult;
   try {
     onProgress?.({ percent: 18, message: "服务器文件库不可用，正在读取备用清单..." });
@@ -101,13 +106,14 @@ async function loadKcfxFileLibrary(statusEl, options = {}) {
 
 async function loadServerKcfxFileLibrary(statusEl, options = {}) {
   const onProgress = typeof options.onProgress === "function" ? options.onProgress : null;
+  const metadataOnly = Boolean(options.metadataOnly);
   try {
     onProgress?.({ percent: 20, message: "正在下载服务器文件库..." });
     const response = await fetchKcfxApi(`${KC_SERVER_LIBRARY_API}?v=${Date.now()}`, { cache: "no-store" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     onProgress?.({ percent: 45, message: "正在解析服务器文件库..." });
     const manifest = await response.json();
-    const result = await importLibraryManifestRecords(manifest, { onProgress });
+    const result = await importLibraryManifestRecords(manifest, { onProgress, metadataOnly });
     if (statusEl) statusEl.textContent = buildSharedLibraryStatus(result.imported, result.cleared, result.sharedCount);
     return { ok: true, ...result, manifest, source: "server" };
   } catch (error) {
@@ -118,22 +124,36 @@ async function loadServerKcfxFileLibrary(statusEl, options = {}) {
 async function importLibraryManifestRecords(manifest, options = {}) {
   const entries = Object.entries(manifest.records || {});
   const onProgress = typeof options.onProgress === "function" ? options.onProgress : null;
+  const metadataOnly = Boolean(options.metadataOnly);
   let imported = 0;
   for (const [index, [id, record]] of entries.entries()) {
     onProgress?.({
       percent: entries.length ? 50 + Math.round((index / entries.length) * 35) : 85,
       message: `正在导入文件记录 ${index + 1}/${entries.length}`
     });
-    if (!SLOT_BY_ID[id] || !Array.isArray(record.rows)) continue;
+    if (!SLOT_BY_ID[id]) continue;
+    const local = await getRecord(id);
+    let importRecord = record;
+    if (!metadataOnly && !Array.isArray(importRecord.rows)) {
+      importRecord = await loadServerKcfxFullRecord(id, index, entries.length, onProgress);
+    }
+    if (!metadataOnly && !Array.isArray(importRecord?.rows)) continue;
+    if (
+      metadataOnly
+      && !Array.isArray(importRecord.rows)
+      && Array.isArray(local?.rows)
+      && (!importRecord.serverFilePath || importRecord.serverFilePath === local.serverFilePath)
+    ) {
+      importRecord = { ...importRecord, rows: local.rows };
+    }
     const nextRecord = {
-      ...record,
+      ...importRecord,
       id,
-      appliedAt: record.appliedAt || record.serverSavedAt || record.savedAt || manifest.savedAt || "",
-      sharedSavedAt: record.serverSavedAt || manifest.savedAt || record.savedAt || "",
-      libraryPath: record.libraryPath || `${KC_SERVER_LIBRARY_API}/records/${id}`,
+      appliedAt: importRecord.appliedAt || importRecord.serverSavedAt || importRecord.savedAt || manifest.savedAt || "",
+      sharedSavedAt: importRecord.serverSavedAt || manifest.savedAt || importRecord.savedAt || "",
+      libraryPath: importRecord.libraryPath || `${KC_SERVER_LIBRARY_API}/records/${id}`,
       libraryManifestPath: KC_SERVER_LIBRARY_API
     };
-    const local = await getRecord(id);
     if (shouldImportSharedRecord(nextRecord, local)) {
       await saveRecord(nextRecord);
       imported += 1;
@@ -142,6 +162,17 @@ async function importLibraryManifestRecords(manifest, options = {}) {
   onProgress?.({ percent: 88, message: "正在清理旧文件记录..." });
   const cleared = await clearStaleSharedRecords(new Set(entries.map(([id]) => id)));
   return { imported, cleared, sharedCount: entries.length, manifest };
+}
+
+async function loadServerKcfxFullRecord(id, index, total, onProgress) {
+  onProgress?.({
+    percent: total ? 50 + Math.round((index / total) * 35) : 85,
+    message: `正在读取完整数据 ${index + 1}/${total}`
+  });
+  const response = await fetchKcfxApi(`${KC_SERVER_LIBRARY_API}/records/${encodeURIComponent(id)}?v=${Date.now()}`, { cache: "no-store" });
+  if (!response.ok) throw new Error(`${id} HTTP ${response.status}`);
+  const payload = await response.json();
+  return payload.record || null;
 }
 
 function getKcfxCurrentUser() {
@@ -304,6 +335,7 @@ function libraryRecordDiffers(shared, local) {
   if (!local) return true;
   if (hasPendingRecord(local)) return false;
   return isDeletedRecord(local)
+    || (Array.isArray(shared.rows) && !Array.isArray(local.rows))
     || (local.libraryPath || "") !== (shared.libraryPath || "")
     || (local.savedAt || "") !== (shared.savedAt || "")
     || (local.appliedAt || "") !== (shared.appliedAt || "")
