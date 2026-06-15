@@ -47,6 +47,12 @@ const MAINTENANCE_LIBRARY_PAGES = [
 
 const EMBEDDED_KCFX_PAGES = [...SALES_INVENTORY_PAGES, ...MAINTENANCE_LIBRARY_PAGES];
 
+const SYSTEM_FILE_LIBRARY_PAGES = [
+  { tab: 'systemMigrationPackage', key: 'migrationPackage', label: '迁移备份包' },
+  { tab: 'systemInvoiceUploads', key: 'invoiceUploads', label: '发票原件库' },
+  { tab: 'systemSalesInventoryFiles', key: 'salesInventoryFiles', label: '销售库存看板文件' }
+];
+
 function createInspectionNoticeRow(values = {}) {
   return INSPECTION_NOTICE_FIELDS.reduce((row, field) => ({
     ...row,
@@ -94,6 +100,7 @@ function App() {
   const [dimensionOwnerFilter, setDimensionOwnerFilter] = useState([]);
   const [dimensionAnnualFilter, setDimensionAnnualFilter] = useState([]);
   const [managedUsers, setManagedUsers] = useState([]);
+  const [systemFilePackages, setSystemFilePackages] = useState([]);
   const [newUserName, setNewUserName] = useState('');
   const [newUserPassword, setNewUserPassword] = useState('123456');
   const systemOwnerName = '孙立柱';
@@ -147,6 +154,16 @@ function App() {
       children: [
         { value: 'systemManagement.permissionManagement', tab: 'permissionManagement', label: '权限管理' }
       ]
+    },
+    {
+      value: 'systemFileLibrary',
+      label: '系统文件库',
+      fixedOwnerOnly: true,
+      children: SYSTEM_FILE_LIBRARY_PAGES.map((page) => ({
+        value: `systemFileLibrary.${page.key}`,
+        tab: page.tab,
+        label: page.label
+      }))
     }
   ];
   const tabPermissionMap = Object.fromEntries(
@@ -169,7 +186,8 @@ function App() {
     'maintenanceLibrary.factLibrary': ['maintenanceLibrary', 'salesInventory', 'salesInventory.factLibrary'],
     'maintenanceLibrary.salesLibrary': ['maintenanceLibrary', 'salesInventory', 'salesInventory.salesLibrary'],
     'maintenanceLibrary.fileLibrary': ['maintenanceLibrary', 'salesInventory', 'salesInventory.fileLibrary'],
-    'systemManagement.permissionManagement': ['permissionManagement']
+    'systemManagement.permissionManagement': ['permissionManagement'],
+    ...Object.fromEntries(SYSTEM_FILE_LIBRARY_PAGES.map((page) => [`systemFileLibrary.${page.key}`, ['systemFileLibrary']]))
   };
   function hasPermission(permission) {
     if (user?.name === systemOwnerName) return true;
@@ -189,12 +207,14 @@ function App() {
   }
   const canManageMailSettings = user?.name === systemOwnerName;
   const canManagePermissions = user?.name === systemOwnerName;
+  const canManageSystemFiles = user?.name === systemOwnerName;
   const canAccessSupplierPayment = canAccessGroup('supplierPayment');
   const canManageInvoiceInventory = canAccessTab('invoiceInventory');
   const canManageSuppliers = canAccessTab('suppliers');
   const canAccessQualityInspection = canAccessGroup('qualityInspection');
   const canAccessSalesInventory = canAccessGroup('salesInventory');
   const canAccessMaintenanceLibrary = canAccessGroup('maintenanceLibrary');
+  const canAccessSystemFileLibrary = canAccessGroup('systemFileLibrary');
   const qualityInspectionPages = {
     inspectionNotice: '验货通知',
     inspectionSchedule: '验货安排',
@@ -225,7 +245,7 @@ function App() {
 
   async function loadData() {
     const params = user ? `?user=${encodeURIComponent(user.name)}&role=${encodeURIComponent(user.role)}` : '';
-    const [invoiceRes, draftRes, supplierRes, ownerRes, reminderRes, settingsRes, usersRes, inspectionInitialRes, inspectionNoticeRes] = await Promise.all([
+    const [invoiceRes, draftRes, supplierRes, ownerRes, reminderRes, settingsRes, usersRes, inspectionInitialRes, inspectionNoticeRes, systemFilePackagesRes] = await Promise.all([
       fetch(`${API}/api/invoices${params}`),
       fetch(`${API}/api/drafts${params}`),
       fetch(`${API}/api/suppliers`),
@@ -234,7 +254,8 @@ function App() {
       fetch(`${API}/api/settings${params}`),
       canManagePermissions ? fetch(`${API}/api/users${params}`) : Promise.resolve(null),
       canAccessTab('inspectionInitialData') ? fetch(`${API}/api/quality-inspection/initial-data${params}`) : Promise.resolve(null),
-      canAccessTab('inspectionNotice') ? fetch(`${API}/api/quality-inspection/notices${params}`) : Promise.resolve(null)
+      canAccessTab('inspectionNotice') ? fetch(`${API}/api/quality-inspection/notices${params}`) : Promise.resolve(null),
+      canManageSystemFiles ? fetch(`${API}/api/system-file-library${params}`) : Promise.resolve(null)
     ]);
     setInvoices(await invoiceRes.json());
     setDrafts(await draftRes.json());
@@ -271,6 +292,11 @@ function App() {
       setInspectionNoticeSubmission({ rows: [], submittedAt: '', submittedBy: '' });
       setInspectionNoticeRows([createInspectionNoticeRow({ inspectionApplicant: user.name })]);
     }
+    if (systemFilePackagesRes?.ok) {
+      setSystemFilePackages(await systemFilePackagesRes.json());
+    } else if (!canManageSystemFiles) {
+      setSystemFilePackages([]);
+    }
   }
 
   useEffect(() => {
@@ -294,7 +320,7 @@ function App() {
     if (user && !canManagePermissions && activeTab === 'permissionManagement') {
       openFirstAllowedTab();
     }
-  }, [activeTab, canAccessMaintenanceLibrary, canAccessQualityInspection, canAccessSalesInventory, canAccessSupplierPayment, canManageInvoiceInventory, canManagePermissions, canManageSuppliers, user]);
+  }, [activeTab, canAccessMaintenanceLibrary, canAccessQualityInspection, canAccessSalesInventory, canAccessSupplierPayment, canAccessSystemFileLibrary, canManageInvoiceInventory, canManagePermissions, canManageSuppliers, user]);
 
   useEffect(() => {
     function closeFilters() {
@@ -1003,6 +1029,22 @@ function App() {
     link.remove();
   }
 
+  function formatBytes(value) {
+    const size = Number(value) || 0;
+    if (size >= 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)} MB`;
+    if (size >= 1024) return `${(size / 1024).toFixed(1)} KB`;
+    return `${size} B`;
+  }
+
+  function downloadSystemPackage(packageId) {
+    if (!user) return;
+    const link = document.createElement('a');
+    link.href = `${API}/api/system-file-library/${encodeURIComponent(packageId)}/download?user=${encodeURIComponent(user.name)}&role=${encodeURIComponent(user.role)}`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  }
+
   if (!user) {
     return (
       <main className="login-shell">
@@ -1142,6 +1184,32 @@ function App() {
                     key={page.tab}
                     className={activeTab === page.tab ? 'active' : ''}
                     onClick={() => openMenuTab(page.tab, 'maintenanceLibrary')}
+                  >
+                    {page.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          )}
+          {canAccessSystemFileLibrary && (
+          <div className="menu-group">
+            <button
+              type="button"
+              className={`menu-group-toggle ${activeMenuGroup === 'systemFileLibrary' ? 'active' : ''}`}
+              onClick={() => toggleMenuGroup('systemFileLibrary')}
+              aria-expanded={activeMenuGroup === 'systemFileLibrary'}
+            >
+              系统文件库
+              <span>{activeMenuGroup === 'systemFileLibrary' ? '▾' : '▸'}</span>
+            </button>
+            {activeMenuGroup === 'systemFileLibrary' && (
+              <div className="submenu-list">
+                {SYSTEM_FILE_LIBRARY_PAGES.filter((page) => canAccessTab(page.tab)).map((page) => (
+                  <button
+                    key={page.tab}
+                    className={activeTab === page.tab ? 'active' : ''}
+                    onClick={() => openMenuTab(page.tab, 'systemFileLibrary')}
                   >
                     {page.label}
                   </button>
@@ -1625,6 +1693,39 @@ function App() {
                 )
               ]}
             />
+          </>
+        )}
+
+        {SYSTEM_FILE_LIBRARY_PAGES.some((page) => page.tab === activeTab) && canManageSystemFiles && (
+          <>
+            <div className="section-heading-row">
+              <h2>系统文件库</h2>
+              <span className="section-count">仅管理员可见</span>
+            </div>
+            <section className="system-file-panel">
+              <div className="info-banner">
+                <strong>迁移下载说明</strong>
+                <span>下载包会过滤 SMTP 授权码和用户密码；发票原件、销售库存看板静态文件按现有引用逻辑打包。</span>
+              </div>
+              <div className="system-file-grid">
+                {systemFilePackages
+                  .filter((item) => {
+                    const activePage = SYSTEM_FILE_LIBRARY_PAGES.find((page) => page.tab === activeTab);
+                    return !activePage || item.tabPermission === `systemFileLibrary.${activePage.key}`;
+                  })
+                  .map((item) => (
+                    <article className="system-file-card" key={item.id}>
+                      <h3>{item.label}</h3>
+                      <p>{item.description}</p>
+                      <div className="system-file-meta">
+                        <span>文件数：{item.fileCount}</span>
+                        <span>大小：{formatBytes(item.size)}</span>
+                      </div>
+                      <button type="button" onClick={() => downloadSystemPackage(item.id)}>下载</button>
+                    </article>
+                  ))}
+              </div>
+            </section>
           </>
         )}
 

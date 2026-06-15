@@ -792,6 +792,44 @@ th {
   background: #f8fafc;
 }
 
+.system-file-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.system-file-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px;
+}
+
+.system-file-card {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid #dbe3ee;
+  border-radius: 8px;
+  background: white;
+}
+
+.system-file-card h3,
+.system-file-card p {
+  margin: 0;
+}
+
+.system-file-card p {
+  color: #64748b;
+  line-height: 1.5;
+}
+
+.system-file-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: #475569;
+  font-size: 13px;
+}
+
 .actions,
 .inline-form,
 .management-grid {

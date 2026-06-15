@@ -5,7 +5,7 @@ import nodemailer from 'nodemailer';
 import { PDFParse } from 'pdf-parse';
 import xlsx from 'xlsx';
 import { addDays, format, parseISO } from 'date-fns';
-import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -14,6 +14,7 @@ const rootDir = path.resolve(__dirname, '..');
 const dataDir = path.join(rootDir, 'data');
 const uploadDir = path.join(dataDir, 'uploads');
 const dbPath = path.join(dataDir, 'db.json');
+const kcfxDir = path.join(rootDir, 'public', 'kcfx');
 
 const app = express();
 const upload = multer({ dest: uploadDir });
@@ -42,6 +43,34 @@ const MAINTENANCE_LIBRARY_PERMISSIONS = [
   'maintenanceLibrary.factLibrary',
   'maintenanceLibrary.salesLibrary',
   'maintenanceLibrary.fileLibrary'
+];
+const SYSTEM_FILE_LIBRARY_PERMISSIONS = [
+  'systemFileLibrary.migrationPackage',
+  'systemFileLibrary.invoiceUploads',
+  'systemFileLibrary.salesInventoryFiles'
+];
+const SYSTEM_FILE_PACKAGES = [
+  {
+    id: 'migration-package',
+    tabPermission: 'systemFileLibrary.migrationPackage',
+    label: '迁移备份包',
+    fileName: '系统迁移备份包.zip',
+    description: '脱敏系统数据、发票原件、销售库存看板静态文件'
+  },
+  {
+    id: 'invoice-uploads',
+    tabPermission: 'systemFileLibrary.invoiceUploads',
+    label: '发票原件库',
+    fileName: '发票原件库.zip',
+    description: '已上传发票原文件和发票索引'
+  },
+  {
+    id: 'sales-inventory-files',
+    tabPermission: 'systemFileLibrary.salesInventoryFiles',
+    label: '销售库存看板文件',
+    fileName: '销售库存看板文件.zip',
+    description: '销售及库存看板嵌入页面的静态运行文件'
+  }
 ];
 const PERMISSION_GROUPS = [
   {
@@ -75,6 +104,10 @@ const PERMISSION_GROUPS = [
     children: MAINTENANCE_LIBRARY_PERMISSIONS
   },
   {
+    value: 'systemFileLibrary',
+    children: SYSTEM_FILE_LIBRARY_PERMISSIONS
+  },
+  {
     value: 'systemManagement',
     children: ['systemManagement.permissionManagement']
   }
@@ -96,6 +129,7 @@ function expandPermissionKey(permission) {
   if (permission === 'salesInventory.factLibrary') return ['maintenanceLibrary', 'maintenanceLibrary.factLibrary'];
   if (permission === 'salesInventory.salesLibrary') return ['maintenanceLibrary', 'maintenanceLibrary.salesLibrary'];
   if (permission === 'salesInventory.fileLibrary') return ['maintenanceLibrary', 'maintenanceLibrary.fileLibrary'];
+  if (permission === 'systemFileLibrary') return ['systemFileLibrary', ...SYSTEM_FILE_LIBRARY_PERMISSIONS];
   if (permission === 'permissionManagement') return ['systemManagement', 'systemManagement.permissionManagement'];
   if (permission === 'systemManagement') return ['systemManagement', 'systemManagement.permissionManagement'];
   const group = PERMISSION_GROUPS.find((item) => item.children.includes(permission));
@@ -145,6 +179,189 @@ function detectMime(buffer) {
   if (header.startsWith('GIF8')) return 'image/gif';
   if (header.startsWith('RIFF') && buffer.subarray(8, 12).toString('latin1') === 'WEBP') return 'image/webp';
   return 'application/octet-stream';
+}
+
+function zipTimestamp(date = new Date()) {
+  const year = Math.max(date.getFullYear(), 1980);
+  const dosTime = (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2);
+  const dosDate = ((year - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate();
+  return { dosTime, dosDate };
+}
+
+const crcTable = Array.from({ length: 256 }, (_, index) => {
+  let value = index;
+  for (let bit = 0; bit < 8; bit += 1) {
+    value = (value & 1) ? (0xedb88320 ^ (value >>> 1)) : (value >>> 1);
+  }
+  return value >>> 0;
+});
+
+function crc32(buffer) {
+  let crc = 0xffffffff;
+  for (const byte of buffer) {
+    crc = crcTable[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function makeZip(files) {
+  const localParts = [];
+  const centralParts = [];
+  let offset = 0;
+  for (const file of files) {
+    const nameBuffer = Buffer.from(file.name.replace(/\\/g, '/'), 'utf8');
+    const data = Buffer.isBuffer(file.data) ? file.data : Buffer.from(file.data || '');
+    const { dosTime, dosDate } = zipTimestamp(file.date);
+    const crc = crc32(data);
+
+    const localHeader = Buffer.alloc(30);
+    localHeader.writeUInt32LE(0x04034b50, 0);
+    localHeader.writeUInt16LE(20, 4);
+    localHeader.writeUInt16LE(0x0800, 6);
+    localHeader.writeUInt16LE(0, 8);
+    localHeader.writeUInt16LE(dosTime, 10);
+    localHeader.writeUInt16LE(dosDate, 12);
+    localHeader.writeUInt32LE(crc, 14);
+    localHeader.writeUInt32LE(data.length, 18);
+    localHeader.writeUInt32LE(data.length, 22);
+    localHeader.writeUInt16LE(nameBuffer.length, 26);
+    localHeader.writeUInt16LE(0, 28);
+    localParts.push(localHeader, nameBuffer, data);
+
+    const centralHeader = Buffer.alloc(46);
+    centralHeader.writeUInt32LE(0x02014b50, 0);
+    centralHeader.writeUInt16LE(20, 4);
+    centralHeader.writeUInt16LE(20, 6);
+    centralHeader.writeUInt16LE(0x0800, 8);
+    centralHeader.writeUInt16LE(0, 10);
+    centralHeader.writeUInt16LE(dosTime, 12);
+    centralHeader.writeUInt16LE(dosDate, 14);
+    centralHeader.writeUInt32LE(crc, 16);
+    centralHeader.writeUInt32LE(data.length, 20);
+    centralHeader.writeUInt32LE(data.length, 24);
+    centralHeader.writeUInt16LE(nameBuffer.length, 28);
+    centralHeader.writeUInt16LE(0, 30);
+    centralHeader.writeUInt16LE(0, 32);
+    centralHeader.writeUInt16LE(0, 34);
+    centralHeader.writeUInt16LE(0, 36);
+    centralHeader.writeUInt32LE(0, 38);
+    centralHeader.writeUInt32LE(offset, 42);
+    centralParts.push(centralHeader, nameBuffer);
+
+    offset += localHeader.length + nameBuffer.length + data.length;
+  }
+
+  const centralSize = centralParts.reduce((sum, part) => sum + part.length, 0);
+  const endHeader = Buffer.alloc(22);
+  endHeader.writeUInt32LE(0x06054b50, 0);
+  endHeader.writeUInt16LE(0, 4);
+  endHeader.writeUInt16LE(0, 6);
+  endHeader.writeUInt16LE(files.length, 8);
+  endHeader.writeUInt16LE(files.length, 10);
+  endHeader.writeUInt32LE(centralSize, 12);
+  endHeader.writeUInt32LE(offset, 16);
+  endHeader.writeUInt16LE(0, 20);
+  return Buffer.concat([...localParts, ...centralParts, endHeader]);
+}
+
+function safeArchiveName(name) {
+  return String(name || '')
+    .replace(/\\/g, '/')
+    .split('/')
+    .filter((part) => part && part !== '.' && part !== '..')
+    .join('/');
+}
+
+async function collectFiles(baseDir, archivePrefix) {
+  const files = [];
+  async function walk(currentDir, relativeDir = '') {
+    let entries = [];
+    try {
+      entries = await readdir(currentDir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const fullPath = path.join(currentDir, entry.name);
+      const relativePath = path.join(relativeDir, entry.name);
+      if (entry.isDirectory()) {
+        await walk(fullPath, relativePath);
+      } else if (entry.isFile()) {
+        const data = await readFile(fullPath);
+        const info = await stat(fullPath);
+        files.push({
+          name: safeArchiveName(path.join(archivePrefix, relativePath)),
+          data,
+          date: info.mtime
+        });
+      }
+    }
+  }
+  await walk(baseDir);
+  return files;
+}
+
+function redactDb(db) {
+  return {
+    ...db,
+    settings: {
+      ...(db.settings || {}),
+      smtpPassword: db.settings?.smtpPassword ? '[已隐藏]' : ''
+    },
+    users: (db.users || []).map((user) => ({
+      ...user,
+      password: user.password ? '[已隐藏]' : ''
+    }))
+  };
+}
+
+function invoiceIndex(db) {
+  return (db.invoices || []).map((invoice) => ({
+    id: invoice.id,
+    supplier: invoice.supplier,
+    invoiceNo: invoice.invoiceNo,
+    amount: invoice.amount,
+    issueDate: invoice.issueDate,
+    status: invoice.status,
+    owner: invoice.owner,
+    uploadedBy: invoice.uploadedBy,
+    fileName: invoice.fileName,
+    originalName: invoice.originalName,
+    mimeType: invoice.mimeType
+  }));
+}
+
+async function packageStats(packageId, db) {
+  const files = await buildSystemPackageFiles(packageId, db, false);
+  return files.reduce((result, file) => ({
+    fileCount: result.fileCount + 1,
+    size: result.size + (file.size ?? file.data?.length ?? 0)
+  }), { fileCount: 0, size: 0 });
+}
+
+async function buildSystemPackageFiles(packageId, db, includeData = true) {
+  const files = [];
+  const pushJson = (name, value) => {
+    const data = Buffer.from(JSON.stringify(value, null, 2), 'utf8');
+    files.push(includeData ? { name, data } : { name, size: data.length });
+  };
+  const pushCollected = async (dir, prefix) => {
+    const collected = await collectFiles(dir, prefix);
+    files.push(...(includeData ? collected : collected.map((file) => ({ name: file.name, size: file.data.length }))));
+  };
+
+  if (packageId === 'migration-package') {
+    pushJson('system-data/db.redacted.json', redactDb(db));
+    pushJson('system-data/invoice-index.json', invoiceIndex(db));
+    await pushCollected(uploadDir, 'invoice-uploads');
+    await pushCollected(kcfxDir, 'kcfx');
+  } else if (packageId === 'invoice-uploads') {
+    pushJson('invoice-index.json', invoiceIndex(db));
+    await pushCollected(uploadDir, 'invoice-uploads');
+  } else if (packageId === 'sales-inventory-files') {
+    await pushCollected(kcfxDir, 'kcfx');
+  }
+  return files;
 }
 
 async function sendUploadedFile(req, res) {
@@ -1244,6 +1461,34 @@ app.patch('/api/settings', async (req, res) => {
   }
   await saveDb(db);
   res.json(publicSettingsForUser(db.settings, requestUser));
+});
+
+app.get('/api/system-file-library', async (req, res) => {
+  const db = await ensureDb();
+  const requestUser = requireSystemOwner(db, req, res);
+  if (!requestUser) return;
+  const packages = await Promise.all(SYSTEM_FILE_PACKAGES.map(async (item) => ({
+    ...item,
+    ...(await packageStats(item.id, db))
+  })));
+  res.json(packages);
+});
+
+app.get('/api/system-file-library/:id/download', async (req, res) => {
+  const db = await ensureDb();
+  const requestUser = requireSystemOwner(db, req, res);
+  if (!requestUser) return;
+  const packageInfo = SYSTEM_FILE_PACKAGES.find((item) => item.id === req.params.id);
+  if (!packageInfo) return res.status(404).json({ error: 'package not found' });
+  const files = await buildSystemPackageFiles(packageInfo.id, db, true);
+  const buffer = makeZip(files);
+  const asciiFallback = packageInfo.fileName.replace(/[^\x20-\x7E]/g, '_').replace(/["\\]/g, '_');
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(packageInfo.fileName)}`
+  );
+  res.send(buffer);
 });
 
 const distDir = path.join(rootDir, 'dist');
