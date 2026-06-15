@@ -5,6 +5,11 @@ import './styles.css';
 
 const API = import.meta.env.DEV ? 'http://localhost:4001' : '';
 
+function createClientId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
 const INSPECTION_NOTICE_FIELDS = [
   { key: 'inspectionApplicant', label: '验货填写人', readonly: true },
   { key: 'inspectionFillTime', label: '验货填写时间', inputType: 'date' },
@@ -65,7 +70,7 @@ function createInspectionNoticeRow(values = {}) {
           : String(values[field.key] || '').split(/[、,，]/).map((item) => item.trim()).filter(Boolean))
       : values[field.key] || ''
   }), {
-    id: values.id || crypto.randomUUID()
+    id: values.id || createClientId()
   });
 }
 
