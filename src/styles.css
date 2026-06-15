@@ -842,6 +842,11 @@ th {
   border: 1px solid #d7dee8;
   border-radius: 8px;
   background: #f8fafc;
+  visibility: hidden;
+}
+
+.embedded-dashboard-panel iframe.is-ready {
+  visibility: visible;
 }
 
 .system-file-panel {

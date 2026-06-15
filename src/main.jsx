@@ -250,15 +250,19 @@ function App() {
   }
 
   function applyEmbeddedDashboardChrome(event) {
+    const iframe = event.currentTarget;
     try {
-      event.currentTarget.contentDocument?.body?.classList.add('embedded-host');
+      iframe.contentDocument?.documentElement?.classList.add('embedded-host-root');
+      iframe.contentDocument?.body?.classList.add('embedded-host');
     } catch {
       // The embedded dashboard is served from the same app; ignore if the browser blocks access.
+    } finally {
+      iframe.classList.add('is-ready');
     }
   }
 
   function embeddedKcfxSrc(page) {
-    return `/kcfx/${page.sourceFile}?embed=1&v=20260615e`;
+    return `/kcfx/${page.sourceFile}?embed=1&v=20260616f`;
   }
 
   function assertApiResponse(label, response) {
