@@ -1,12 +1,25 @@
 const $ = (selector) => document.querySelector(selector);
 const selectedServerFiles = new Map();
 
-document.addEventListener("DOMContentLoaded", async () => {
-  await loadSharedLibrary({ statusEl: $("#sharedStatus") });
+document.addEventListener("DOMContentLoaded", () => {
+  applyEmbeddedHostClass();
   bindToolbar();
   applyToolbarPermissions();
-  await renderLibrary();
+  renderLibrary().catch((error) => {
+    setLibraryStatus(`文件槽位加载失败：${error?.message || error}`);
+  });
+  loadSharedLibrary({ statusEl: $("#sharedStatus") })
+    .then(() => renderLibrary())
+    .catch((error) => {
+      setLibraryStatus(`文件库同步失败：${error?.message || error}`);
+    });
 });
+
+function applyEmbeddedHostClass() {
+  if (new URLSearchParams(window.location.search).get("embed") === "1") {
+    document.body.classList.add("embedded-host");
+  }
+}
 
 function bindToolbar() {
   $("#refreshBtn").addEventListener("click", refreshAll);

@@ -257,6 +257,10 @@ function App() {
     }
   }
 
+  function embeddedKcfxSrc(page) {
+    return `/kcfx/${page.sourceFile}?embed=1&v=20260615e`;
+  }
+
   function assertApiResponse(label, response) {
     if (!response) return;
     if (!response.ok) {
@@ -2215,18 +2219,11 @@ function App() {
           <section className="embedded-dashboard-panel">
             <div className="embedded-dashboard-header">
               <h2>{embeddedKcfxPageMap[activeTab].label}</h2>
-              <a
-                className="ghost embedded-dashboard-link"
-                href={`/kcfx/${embeddedKcfxPageMap[activeTab].sourceFile}`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                新窗口打开
-              </a>
             </div>
             <iframe
+              key={activeTab}
               title={embeddedKcfxPageMap[activeTab].label}
-              src={`/kcfx/${embeddedKcfxPageMap[activeTab].sourceFile}`}
+              src={embeddedKcfxSrc(embeddedKcfxPageMap[activeTab])}
               onLoad={applyEmbeddedDashboardChrome}
             />
           </section>
