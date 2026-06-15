@@ -17,6 +17,7 @@ const uploadDir = path.join(dataDir, 'uploads');
 const originalMaintenanceLibraryDir = path.join(dataDir, 'files', 'original', 'maintenance-library');
 const kcfxFileDir = originalMaintenanceLibraryDir;
 const legacyKcfxFileDir = path.join(dataDir, 'kcfx-files');
+const kcfxRecordDir = path.join(dataDir, 'kcfx-records');
 const dbPath = path.join(dataDir, 'db.json');
 const kcfxDir = path.join(rootDir, 'public', 'kcfx');
 
@@ -499,6 +500,7 @@ function normalizeDb(db) {
 async function ensureDb() {
   await mkdir(uploadDir, { recursive: true });
   await mkdir(kcfxFileDir, { recursive: true });
+  await mkdir(kcfxRecordDir, { recursive: true });
   try {
     return normalizeDb(JSON.parse(await readFile(dbPath, 'utf8')));
   } catch {
@@ -1557,11 +1559,108 @@ app.patch('/api/settings', async (req, res) => {
 
 function stripKcfxRecordRows(record = {}) {
   const { rows, ...metadata } = record || {};
+  const rowCount = Array.isArray(rows) ? rows.length : Number(record.rowCount || 0);
   return {
     ...metadata,
-    rowCount: Array.isArray(rows) ? rows.length : Number(record.rowCount || 0),
-    hasRows: Array.isArray(rows)
+    rowCount,
+    hasRows: Array.isArray(rows) || Boolean(record.rowsPath) || rowCount > 0
   };
+}
+
+function safeKcfxRecordId(id) {
+  return path.basename(String(id || '').trim()).replace(/[^a-z0-9_-]/gi, '');
+}
+
+function kcfxRecordRowsRelativePath(id) {
+  const safeId = safeKcfxRecordId(id);
+  if (!safeId) throw new Error('invalid record id');
+  return safeArchiveName(path.join('kcfx-records', `${safeId}.json`));
+}
+
+function kcfxRecordRowsFullPath(recordOrId) {
+  const rowsPath = typeof recordOrId === 'string'
+    ? kcfxRecordRowsRelativePath(recordOrId)
+    : recordOrId?.rowsPath || kcfxRecordRowsRelativePath(recordOrId?.id);
+  return path.join(dataDir, safeArchiveName(rowsPath));
+}
+
+function preserveKcfxRowsMetadata(record = {}) {
+  const metadata = {};
+  if (record.rowsPath) metadata.rowsPath = record.rowsPath;
+  if (record.rowsSavedAt) metadata.rowsSavedAt = record.rowsSavedAt;
+  if (Number.isFinite(Number(record.rowCount))) metadata.rowCount = Number(record.rowCount);
+  return metadata;
+}
+
+async function writeKcfxRecordRows(id, rows) {
+  await mkdir(kcfxRecordDir, { recursive: true });
+  const relativePath = kcfxRecordRowsRelativePath(id);
+  const fullPath = path.join(dataDir, relativePath);
+  const savedAt = new Date().toISOString();
+  await writeFile(fullPath, JSON.stringify({
+    id,
+    savedAt,
+    rowCount: rows.length,
+    rows
+  }), 'utf8');
+  return {
+    rowsPath: relativePath,
+    rowsSavedAt: savedAt,
+    rowCount: rows.length
+  };
+}
+
+async function readKcfxRecordRows(record = {}) {
+  if (Array.isArray(record.rows)) return record.rows;
+  if (!record.rowsPath) return [];
+  const payload = JSON.parse(await readFile(kcfxRecordRowsFullPath(record), 'utf8'));
+  return Array.isArray(payload?.rows) ? payload.rows : [];
+}
+
+async function externalizeKcfxRecordRows(record = {}, id = record.id) {
+  if (!Array.isArray(record.rows)) {
+    return {
+      ...record,
+      rowCount: Number(record.rowCount || 0)
+    };
+  }
+  const rowsMetadata = await writeKcfxRecordRows(id, record.rows);
+  const { rows, ...metadata } = record;
+  return {
+    ...metadata,
+    ...rowsMetadata
+  };
+}
+
+async function externalizeKcfxLibraryInlineRows(db) {
+  let changed = false;
+  const records = db.kcfxLibrary?.records || {};
+  for (const [id, record] of Object.entries(records)) {
+    if (!Array.isArray(record?.rows)) continue;
+    records[id] = await externalizeKcfxRecordRows(record, id);
+    changed = true;
+  }
+  if (changed) {
+    db.kcfxLibrary.savedAt = new Date().toISOString();
+    await saveDb(db);
+  }
+  return changed;
+}
+
+async function attachKcfxRecordRows(record = {}) {
+  return {
+    ...record,
+    rows: await readKcfxRecordRows(record)
+  };
+}
+
+async function removeKcfxRecordRows(record) {
+  if (!record?.rowsPath && !record?.id) return;
+  try {
+    await unlink(kcfxRecordRowsFullPath(record));
+  } catch {
+    // Missing row files should not block deleting the library record.
+  }
 }
 
 function publicKcfxLibrary(db, options = {}) {
@@ -1579,13 +1678,14 @@ function publicKcfxLibrary(db, options = {}) {
 }
 
 function sanitizeKcfxLibraryRecord(id, record = {}) {
-  return {
+  const sanitized = {
     ...record,
     id,
-    rows: Array.isArray(record.rows) ? record.rows : [],
     savedAt: record.savedAt || new Date().toISOString(),
     appliedAt: record.appliedAt || record.savedAt || new Date().toISOString()
   };
+  if (Array.isArray(record.rows)) sanitized.rows = record.rows;
+  return sanitized;
 }
 
 function normalizeKcfxText(value) {
@@ -1822,10 +1922,11 @@ function buildKcfxFileRecord(file, storedFile, slot, parsed) {
 
 function buildQueuedKcfxFileRecord(file, storedFile, slot, previousRecord, requestUserName) {
   const queuedAt = new Date().toISOString();
-  const previousRows = Array.isArray(previousRecord?.rows) ? previousRecord.rows : [];
   const fileName = normalizeUploadedFileName(file.originalname);
+  const { rows, ...previousMetadata } = previousRecord || {};
   return {
-    ...(previousRecord || {}),
+    ...previousMetadata,
+    ...preserveKcfxRowsMetadata(previousRecord),
     id: slot.id,
     type: slot.type,
     title: slot.title,
@@ -1846,8 +1947,7 @@ function buildQueuedKcfxFileRecord(file, storedFile, slot, previousRecord, reque
     parseStartedAt: '',
     parseCompletedAt: '',
     parseFailedAt: '',
-    parseError: '',
-    rows: previousRows
+    parseError: ''
   };
 }
 
@@ -1966,7 +2066,7 @@ async function parseKcfxStoredFile({ id, slot, file, storedFile, previousRecord,
   try {
     const parsed = parseKcfxWorkbookFile(storedFile.fullPath, slot);
     if (!parsed.rows.length) throw new Error('file parsed no valid rows');
-    const record = buildKcfxFileRecord(file, storedFile, slot, parsed);
+    const record = await externalizeKcfxRecordRows(buildKcfxFileRecord(file, storedFile, slot, parsed), id);
     db = await ensureDb();
     const latestRecord = db.kcfxLibrary.records[id];
     if (!latestRecord || latestRecord.serverFilePath !== storedFile.relativePath) return;
@@ -1987,10 +2087,10 @@ async function parseKcfxStoredFile({ id, slot, file, storedFile, previousRecord,
     if (!latestRecord || latestRecord.serverFilePath !== storedFile.relativePath) return;
     db.kcfxLibrary.records[id] = {
       ...latestRecord,
+      ...preserveKcfxRowsMetadata(previousRecord),
       parseStatus: 'failed',
       parseFailedAt: new Date().toISOString(),
-      parseError: error?.message || 'parse failed',
-      rows: Array.isArray(previousRecord?.rows) ? previousRecord.rows : latestRecord.rows || []
+      parseError: error?.message || 'parse failed'
     };
     db.kcfxLibrary.savedAt = new Date().toISOString();
     pushLog(db, 'kcfx file library parse failed', requestUserName, `${requestUserName} uploaded ${latestRecord.title || id}, background parse failed`);
@@ -2000,15 +2100,22 @@ async function parseKcfxStoredFile({ id, slot, file, storedFile, previousRecord,
 
 app.get('/api/kcfx-library', async (req, res) => {
   const db = await ensureDb();
+  await externalizeKcfxLibraryInlineRows(db);
   res.json(publicKcfxLibrary(db, { includeRows: req.query.includeRows === '1' }));
 });
 
 app.get('/api/kcfx-library/records/:id', async (req, res) => {
   const db = await ensureDb();
   const id = String(req.params.id || '').trim();
-  const record = db.kcfxLibrary.records[id];
+  let record = db.kcfxLibrary.records[id];
   if (!record) return res.status(404).json({ error: 'record not found' });
-  res.json({ ok: true, record });
+  if (Array.isArray(record.rows)) {
+    record = await externalizeKcfxRecordRows(record, id);
+    db.kcfxLibrary.records[id] = record;
+    db.kcfxLibrary.savedAt = new Date().toISOString();
+    await saveDb(db);
+  }
+  res.json({ ok: true, record: await attachKcfxRecordRows(record) });
 });
 
 app.post('/api/kcfx-library/records/:id/upload', upload.single('file'), async (req, res) => {
@@ -2037,7 +2144,7 @@ app.post('/api/kcfx-library/records/:id/upload', upload.single('file'), async (r
     storedFile = await saveKcfxOriginalFile(id, req.file);
     const clientRecord = parseKcfxClientRecordPayload(req.body.record);
     if (clientRecord) {
-      const record = buildKcfxClientParsedFileRecord(req.file, storedFile, slot, clientRecord);
+      const record = await externalizeKcfxRecordRows(buildKcfxClientParsedFileRecord(req.file, storedFile, slot, clientRecord), id);
       db.kcfxLibrary.records[id] = {
         ...record,
         serverSavedAt: new Date().toISOString(),
@@ -2085,7 +2192,7 @@ app.put('/api/kcfx-library/records/:id', async (req, res) => {
   if (!requestUser) return;
   const id = String(req.params.id || '').trim();
   if (!id) return res.status(400).json({ error: 'missing id' });
-  const record = sanitizeKcfxLibraryRecord(id, req.body.record || req.body);
+  const record = await externalizeKcfxRecordRows(sanitizeKcfxLibraryRecord(id, req.body.record || req.body), id);
   db.kcfxLibrary.records[id] = {
     ...record,
     serverSavedAt: new Date().toISOString(),
@@ -2104,6 +2211,7 @@ app.delete('/api/kcfx-library/records/:id', async (req, res) => {
   const id = String(req.params.id || '').trim();
   if (!id) return res.status(400).json({ error: 'missing id' });
   await removeKcfxStoredFile(db.kcfxLibrary.records[id]);
+  await removeKcfxRecordRows(db.kcfxLibrary.records[id] || { id });
   delete db.kcfxLibrary.records[id];
   db.kcfxLibrary.savedAt = new Date().toISOString();
   pushLog(db, '文件库删除', requestUser.name, `${requestUser.name} 删除销售及库存看板文件库：${id}`);

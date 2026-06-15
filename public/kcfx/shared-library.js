@@ -186,6 +186,10 @@ async function importLibraryManifestRecords(manifest, options = {}) {
   const targetIds = options.targetIds || null;
   const entries = filterKcfxLibraryEntries(Object.entries(manifest.records || {}), targetIds);
   let imported = 0;
+  if (!entries.length) {
+    onProgress?.({ percent: 88, message: "服务器文件库暂无记录，保留本地已有槽位。" });
+    return { imported: 0, cleared: 0, sharedCount: 0, manifest };
+  }
   for (const [index, [id, record]] of entries.entries()) {
     onProgress?.({
       percent: entries.length ? 50 + Math.round((index / entries.length) * 35) : 85,
