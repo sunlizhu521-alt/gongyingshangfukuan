@@ -318,6 +318,8 @@ function invoiceIndex(db) {
     status: invoice.status,
     owner: invoice.owner,
     uploadedBy: invoice.uploadedBy,
+    isOaPrinted: invoice.isOaPrinted,
+    isPaid: invoice.isPaid,
     fileName: invoice.fileName,
     originalName: invoice.originalName,
     mimeType: invoice.mimeType
@@ -420,8 +422,9 @@ function normalizeDb(db) {
   db.invoices = (db.invoices || []).map((invoice) => ({
     ...invoice,
     oaProcessNo: invoice.oaProcessNo || '',
+    isOaPrinted: invoice.isOaPrinted || (['财务打款', '待财务打款'].includes(invoice.status) ? '是' : ''),
     isPaid: invoice.isPaid || '',
-    status: invoice.status === '财务打款' ? '待财务打款' : invoice.status
+    status: ['财务打款', '待财务打款'].includes(invoice.status) ? '待财务付款' : invoice.status
   }));
   db.owners = (db.owners || []).map((owner) => ({
     ...owner,
@@ -615,7 +618,9 @@ function publicSettings(settings, requestUser) {
 
 function deriveInvoiceStatus(invoice) {
   if (invoice.isPaid === '是') return '完成';
-  if (String(invoice.oaProcessNo || '').trim()) return '待财务打款';
+  if (String(invoice.oaProcessNo || '').trim()) {
+    return invoice.isOaPrinted === '是' ? '待财务付款' : '待打印OA单据';
+  }
   return '待提交付款申请';
 }
 
@@ -1121,10 +1126,14 @@ app.patch('/api/invoices/:id', async (req, res) => {
   if (Object.prototype.hasOwnProperty.call(req.body, 'oaProcessNo')) {
     invoice.oaProcessNo = String(req.body.oaProcessNo || '').trim();
   }
+  if (Object.prototype.hasOwnProperty.call(req.body, 'isOaPrinted')) {
+    invoice.isOaPrinted = req.body.isOaPrinted === '是' ? '是' : '否';
+  }
   if (Object.prototype.hasOwnProperty.call(req.body, 'isPaid')) {
     invoice.isPaid = req.body.isPaid === '是' ? '是' : '';
   }
   if (!Object.prototype.hasOwnProperty.call(req.body, 'oaProcessNo') &&
+      !Object.prototype.hasOwnProperty.call(req.body, 'isOaPrinted') &&
       !Object.prototype.hasOwnProperty.call(req.body, 'isPaid')) {
     invoice.status = req.body.status || invoice.status;
   } else {

@@ -529,7 +529,15 @@ function App() {
   const ownerOptions = useMemo(() => {
     return uniqueValueOptions(invoices.map((invoice) => findBuyerForSupplier(invoice.supplier)));
   }, [invoices, ownerByNormalizedSupplier, ownerBySupplier, owners, suppliers]);
-  const statusOptions = useMemo(() => uniqueOptions(invoices, 'status'), [invoices]);
+  const statusOptions = useMemo(() => {
+    return uniqueValueOptions([
+      ...invoices.map((invoice) => invoice.status),
+      '待提交付款申请',
+      '待打印OA单据',
+      '待财务付款',
+      '完成'
+    ]);
+  }, [invoices]);
   const ledgerInvoices = useMemo(() => {
     return invoices.map((invoice) => {
       const supplier = findSupplierMeta(invoice.supplier);
@@ -640,7 +648,7 @@ function App() {
       return paymentDate && paymentDate > todayStart;
     });
     const submittedRows = filteredInvoices.filter((row) => String(row.oaProcessNo || '').trim());
-    const awaitingFinanceRows = filteredInvoices.filter((row) => row.status === '待财务打款');
+    const awaitingFinanceRows = filteredInvoices.filter((row) => row.status === '待财务付款');
     const completedRows = filteredInvoices.filter((row) => row.status === '完成');
     const thisWeekRows = pendingRows.filter((row) => isThisWeekPayment(row.oaSubmitDate));
     const thisMonthRows = pendingRows.filter((row) => isThisMonthPayment(row.oaSubmitDate));
@@ -1430,7 +1438,7 @@ function App() {
                 <strong>{ledgerStats.submittedOaSupplierCount}</strong>
               </div>
               <div className="metric-card">
-                <span>待财务打款</span>
+                <span>待财务付款</span>
                 <strong>{ledgerStats.awaitingFinanceCount}</strong>
               </div>
               <div className="metric-card">
@@ -1457,7 +1465,7 @@ function App() {
             <DataTable
               className="ledger-table"
               rows={filteredInvoices}
-              columns={['采购员', '供应商', '发票号', '金额', '开票日', '账期', '付款时间', '提交OA时间', '下载发票', 'OA流程号', '是否付款', '状态']}
+              columns={['采购员', '供应商', '发票号', '金额', '开票日', '账期', '付款时间', '提交OA时间', '下载发票', 'OA流程号', '是否已打印OA单据', '是否付款', '状态']}
               render={(row) => [
                 row.buyer,
                 row.supplier,
@@ -1474,6 +1482,15 @@ function App() {
                   placeholder="填写OA流程号"
                   onBlur={(event) => updateInvoice(row.id, { oaProcessNo: event.target.value })}
                 />,
+                <select
+                  className="table-select"
+                  value={row.isOaPrinted || ''}
+                  onChange={(event) => updateInvoice(row.id, { isOaPrinted: event.target.value })}
+                >
+                  <option value="">未填写</option>
+                  <option value="否">否</option>
+                  <option value="是">是</option>
+                </select>,
                 <select
                   className="table-select"
                   value={row.isPaid || ''}
