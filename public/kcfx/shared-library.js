@@ -31,6 +31,49 @@ async function fetchKcfxApi(url, options = {}, timeoutMs = KC_SERVER_LOAD_TIMEOU
   }
 }
 
+function postKcfxFormWithProgress(url, form, timeoutMs, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", url);
+    xhr.timeout = timeoutMs;
+    xhr.responseType = "json";
+
+    if (typeof onProgress === "function") {
+      xhr.upload.onprogress = (event) => {
+        if (!event.lengthComputable) {
+          onProgress({ percent: null, loaded: event.loaded || 0, total: null });
+          return;
+        }
+        onProgress({
+          percent: Math.round((event.loaded / event.total) * 100),
+          loaded: event.loaded,
+          total: event.total
+        });
+      };
+    }
+
+    xhr.onload = () => {
+      let payload = xhr.response;
+      if (!payload && xhr.responseText) {
+        try {
+          payload = JSON.parse(xhr.responseText);
+        } catch {
+          payload = {};
+        }
+      }
+      resolve({
+        ok: xhr.status >= 200 && xhr.status < 300,
+        status: xhr.status,
+        payload: payload || {}
+      });
+    };
+    xhr.onerror = () => reject(new Error("上传到腾讯云服务器失败，请检查网络后重试。"));
+    xhr.ontimeout = () => reject(new Error("上传到腾讯云服务器超时，请确认文件大小和网络状态。"));
+    xhr.onabort = () => reject(new Error("上传已取消。"));
+    xhr.send(form);
+  });
+}
+
 async function loadSharedLibrary(options = {}) {
   const statusEl = options.statusEl || null;
   const onProgress = typeof options.onProgress === "function" ? options.onProgress : null;
@@ -207,7 +250,7 @@ async function saveKcfxServerRecord(record) {
   return payload.record || record;
 }
 
-async function uploadKcfxServerFile(slot, file, parsedRecord = null) {
+async function uploadKcfxServerFile(slot, file, parsedRecord = null, options = {}) {
   if (!canManageKcfxLibrary()) throw new Error("只有孙立柱可以维护文件库。");
   const form = new FormData();
   form.append("file", file);
@@ -221,15 +264,16 @@ async function uploadKcfxServerFile(slot, file, parsedRecord = null) {
     sheetHint: slot.sheetHint || "",
     skipRows: slot.skipRows
   }));
-  const response = await fetchKcfxApi(`${KC_SERVER_LIBRARY_API}/records/${encodeURIComponent(slot.id)}/upload?${kcfxUserQuery()}`, {
-    method: "POST",
-    body: form
-  }, KC_SERVER_UPLOAD_TIMEOUT_MS);
-  if (!response.ok) {
-    const payload = await response.json().catch(() => ({}));
-    throw new Error(payload.error || `HTTP ${response.status}`);
+  const result = await postKcfxFormWithProgress(
+    `${KC_SERVER_LIBRARY_API}/records/${encodeURIComponent(slot.id)}/upload?${kcfxUserQuery()}`,
+    form,
+    KC_SERVER_UPLOAD_TIMEOUT_MS,
+    options.onProgress
+  );
+  if (!result.ok) {
+    throw new Error(result.payload?.error || `HTTP ${result.status}`);
   }
-  const payload = await response.json();
+  const payload = result.payload || {};
   const serverRecord = payload.record || {};
   return {
     ...serverRecord,
