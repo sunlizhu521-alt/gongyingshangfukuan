@@ -23,6 +23,10 @@ const upload = multer({ dest: uploadDir });
 app.use(cors());
 app.use(express.json({ limit: '200mb' }));
 
+app.get('/api/health', (req, res) => {
+  res.json({ ok: true, service: 'gongyingaixitong', time: new Date().toISOString() });
+});
+
 const SYSTEM_OWNER_NAME = '孙立柱';
 const ROLE_ADMIN = '管理员';
 const ROLE_FINANCE = '财务';

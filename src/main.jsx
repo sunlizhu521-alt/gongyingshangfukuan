@@ -257,6 +257,13 @@ function App() {
     }
   }
 
+  function assertApiResponse(label, response) {
+    if (!response) return;
+    if (!response.ok) {
+      throw new Error(`${label} HTTP ${response.status}`);
+    }
+  }
+
   async function loadData() {
     const params = user ? `?user=${encodeURIComponent(user.name)}&role=${encodeURIComponent(user.role)}` : '';
     const [invoiceRes, draftRes, supplierRes, ownerRes, reminderRes, settingsRes, usersRes, inspectionInitialRes, inspectionNoticeRes, systemFilePackagesRes] = await Promise.all([
@@ -271,6 +278,18 @@ function App() {
       canAccessTab('inspectionNotice') ? fetch(`${API}/api/quality-inspection/notices${params}`) : Promise.resolve(null),
       canManageSystemFiles ? fetch(`${API}/api/system-file-library${params}`) : Promise.resolve(null)
     ]);
+    [
+      ['发票台账', invoiceRes],
+      ['待确认发票', draftRes],
+      ['供应商账期维度表', supplierRes],
+      ['采购负责人维度表', ownerRes],
+      ['操作日志', reminderRes],
+      ['系统设置', settingsRes],
+      ['权限管理', usersRes],
+      ['验货信息初始数据', inspectionInitialRes],
+      ['验货通知', inspectionNoticeRes],
+      ['系统文件库', systemFilePackagesRes]
+    ].forEach(([label, response]) => assertApiResponse(label, response));
     setInvoices(await invoiceRes.json());
     setDrafts(await draftRes.json());
     setSuppliers(await supplierRes.json());
@@ -314,7 +333,9 @@ function App() {
   }
 
   useEffect(() => {
-    if (user) loadData().catch(() => setMessage('后端服务连接失败，请确认服务已启动。'));
+    if (user) loadData().catch((error) => {
+      setMessage(`后端服务连接失败：${error?.message || '请确认服务已启动。'}`);
+    });
   }, [user]);
 
   useEffect(() => {
