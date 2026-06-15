@@ -5,15 +5,18 @@ import nodemailer from 'nodemailer';
 import { PDFParse } from 'pdf-parse';
 import xlsx from 'xlsx';
 import { addDays, format, parseISO } from 'date-fns';
+import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
-const dataDir = path.join(rootDir, 'data');
+const dataDir = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(rootDir, 'data');
 const uploadDir = path.join(dataDir, 'uploads');
-const kcfxFileDir = path.join(dataDir, 'kcfx-files');
+const originalMaintenanceLibraryDir = path.join(dataDir, 'files', 'original', 'maintenance-library');
+const kcfxFileDir = originalMaintenanceLibraryDir;
+const legacyKcfxFileDir = path.join(dataDir, 'kcfx-files');
 const dbPath = path.join(dataDir, 'db.json');
 const kcfxDir = path.join(rootDir, 'public', 'kcfx');
 
@@ -1768,6 +1771,8 @@ function buildKcfxFileRecord(file, storedFile, slot, parsed) {
     sheetName: parsed.sheetName,
     serverFileName: storedFile.fileName,
     serverFilePath: storedFile.relativePath,
+    serverFileCategory: 'original',
+    serverFileLibrary: 'maintenance-library',
     parseDiagnostics: {
       ...buildKcfxParseDiagnostics(parsed),
       readMode: 'server',
@@ -1778,25 +1783,39 @@ function buildKcfxFileRecord(file, storedFile, slot, parsed) {
 }
 
 async function saveKcfxOriginalFile(slotId, file) {
-  const slotDir = path.join(kcfxFileDir, slotId);
+  const savedAt = new Date();
+  const year = format(savedAt, 'yyyy');
+  const month = format(savedAt, 'MM');
+  const safeSlotId = path.basename(slotId);
+  const slotDir = path.join(kcfxFileDir, year, month, safeSlotId);
   await mkdir(slotDir, { recursive: true });
   const ext = path.extname(file.originalname || '').slice(0, 16);
-  const fileName = `${slotId}-${Date.now()}-${crypto.randomUUID()}${ext}`;
+  const fileName = `${safeSlotId}-${format(savedAt, 'yyyyMMdd-HHmmss')}-${randomUUID()}${ext}`;
   const fullPath = path.join(slotDir, fileName);
   await rename(file.path, fullPath);
   return {
     fullPath,
     fileName,
-    relativePath: safeArchiveName(path.join(slotId, fileName))
+    relativePath: safeArchiveName(path.join(year, month, safeSlotId, fileName))
   };
 }
 
 async function removeKcfxStoredFile(record) {
   if (!record?.serverFileName || !record?.id) return;
-  try {
-    await unlink(path.join(kcfxFileDir, path.basename(record.id), path.basename(record.serverFileName)));
-  } catch {
-    // Keep current request successful if an old file has already been removed.
+  const relativePath = record.serverFilePath
+    ? safeArchiveName(record.serverFilePath)
+    : safeArchiveName(path.join(path.basename(record.id), path.basename(record.serverFileName)));
+  const candidates = [
+    path.join(kcfxFileDir, relativePath),
+    path.join(legacyKcfxFileDir, path.basename(record.id), path.basename(record.serverFileName))
+  ];
+  for (const candidate of candidates) {
+    try {
+      await unlink(candidate);
+      return;
+    } catch {
+      // Keep current request successful if an old file has already been removed.
+    }
   }
 }
 
