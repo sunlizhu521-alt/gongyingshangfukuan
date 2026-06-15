@@ -78,14 +78,28 @@ async function loadSharedLibrary(options = {}) {
   const statusEl = options.statusEl || null;
   const onProgress = typeof options.onProgress === "function" ? options.onProgress : null;
   const metadataOnly = Boolean(options.metadataOnly);
-  const promiseKey = metadataOnly ? "metadata" : "full";
+  const targetIds = normalizeKcfxTargetIds(options.ids || options.targetIds);
+  const targetKey = targetIds ? [...targetIds].sort().join(",") : "all";
+  const promiseKey = `${metadataOnly ? "metadata" : "full"}:${targetKey}`;
   if (options.force) kcSharedLibraryLoadPromises.delete(promiseKey);
   if (!kcSharedLibraryLoadPromises.has(promiseKey)) {
-    kcSharedLibraryLoadPromises.set(promiseKey, loadKcfxFileLibrary(null, { onProgress, metadataOnly }));
+    kcSharedLibraryLoadPromises.set(promiseKey, loadKcfxFileLibrary(null, { onProgress, metadataOnly, targetIds }));
   }
   const result = await kcSharedLibraryLoadPromises.get(promiseKey);
   if (statusEl) renderSharedLibraryStatus(statusEl, result);
   return result;
+}
+
+function normalizeKcfxTargetIds(ids) {
+  if (!ids) return null;
+  const values = Array.isArray(ids) ? ids : [ids];
+  const filtered = values.map((id) => String(id || "").trim()).filter(Boolean);
+  return filtered.length ? new Set(filtered) : null;
+}
+
+function filterKcfxLibraryEntries(entries, targetIds) {
+  if (!targetIds) return entries;
+  return entries.filter(([id]) => targetIds.has(id));
 }
 
 function renderSharedLibraryStatus(statusEl, result) {
@@ -94,22 +108,23 @@ function renderSharedLibraryStatus(statusEl, result) {
     return;
   }
   const entries = Object.entries(result.manifest?.records || {});
-  statusEl.textContent = buildSharedLibraryStatus(result.imported, result.cleared, entries.length);
+  statusEl.textContent = buildSharedLibraryStatus(result.imported, result.cleared, Number.isFinite(result.sharedCount) ? result.sharedCount : entries.length);
 }
 
 async function loadKcfxFileLibrary(statusEl, options = {}) {
   const cacheKey = `v=${Date.now()}`;
   const onProgress = typeof options.onProgress === "function" ? options.onProgress : null;
   const metadataOnly = Boolean(options.metadataOnly);
+  const targetIds = options.targetIds || null;
   onProgress?.({ percent: 12, message: "正在连接服务器文件库..." });
-  const serverResult = await loadServerKcfxFileLibrary(statusEl, { onProgress, metadataOnly });
+  const serverResult = await loadServerKcfxFileLibrary(statusEl, { onProgress, metadataOnly, targetIds });
   if (serverResult.ok) return serverResult;
   try {
     onProgress?.({ percent: 18, message: "服务器文件库不可用，正在读取备用清单..." });
     const response = await fetch(`${KC_FILE_LIBRARY_MANIFEST}?${cacheKey}`, { cache: "no-store" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const manifest = await response.json();
-    const entries = Object.entries(manifest.records || {});
+    const entries = filterKcfxLibraryEntries(Object.entries(manifest.records || {}), targetIds);
     let imported = 0;
 
     for (const [index, [id, entry]] of entries.entries()) {
@@ -138,9 +153,9 @@ async function loadKcfxFileLibrary(statusEl, options = {}) {
     }
 
     onProgress?.({ percent: 86, message: "正在清理旧文件记录..." });
-    const cleared = await clearStaleSharedRecords(new Set(entries.map(([id]) => id)));
+    const cleared = await clearStaleSharedRecords(new Set(entries.map(([id]) => id)), { targetIds });
     if (statusEl) statusEl.textContent = buildSharedLibraryStatus(imported, cleared, entries.length);
-    return { ok: true, imported, cleared, manifest };
+    return { ok: true, imported, cleared, sharedCount: entries.length, manifest };
   } catch (error) {
     if (statusEl) statusEl.textContent = `文件库未加载：${error.message}`;
     return { ok: false, error };
@@ -150,13 +165,14 @@ async function loadKcfxFileLibrary(statusEl, options = {}) {
 async function loadServerKcfxFileLibrary(statusEl, options = {}) {
   const onProgress = typeof options.onProgress === "function" ? options.onProgress : null;
   const metadataOnly = Boolean(options.metadataOnly);
+  const targetIds = options.targetIds || null;
   try {
     onProgress?.({ percent: 20, message: "正在下载服务器文件库..." });
     const response = await fetchKcfxApi(`${KC_SERVER_LIBRARY_API}?v=${Date.now()}`, { cache: "no-store" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     onProgress?.({ percent: 45, message: "正在解析服务器文件库..." });
     const manifest = await response.json();
-    const result = await importLibraryManifestRecords(manifest, { onProgress, metadataOnly });
+    const result = await importLibraryManifestRecords(manifest, { onProgress, metadataOnly, targetIds });
     if (statusEl) statusEl.textContent = buildSharedLibraryStatus(result.imported, result.cleared, result.sharedCount);
     return { ok: true, ...result, manifest, source: "server" };
   } catch (error) {
@@ -165,9 +181,10 @@ async function loadServerKcfxFileLibrary(statusEl, options = {}) {
 }
 
 async function importLibraryManifestRecords(manifest, options = {}) {
-  const entries = Object.entries(manifest.records || {});
   const onProgress = typeof options.onProgress === "function" ? options.onProgress : null;
   const metadataOnly = Boolean(options.metadataOnly);
+  const targetIds = options.targetIds || null;
+  const entries = filterKcfxLibraryEntries(Object.entries(manifest.records || {}), targetIds);
   let imported = 0;
   for (const [index, [id, record]] of entries.entries()) {
     onProgress?.({
@@ -203,7 +220,7 @@ async function importLibraryManifestRecords(manifest, options = {}) {
     }
   }
   onProgress?.({ percent: 88, message: "正在清理旧文件记录..." });
-  const cleared = await clearStaleSharedRecords(new Set(entries.map(([id]) => id)));
+  const cleared = await clearStaleSharedRecords(new Set(entries.map(([id]) => id)), { targetIds });
   return { imported, cleared, sharedCount: entries.length, manifest };
 }
 
@@ -331,11 +348,13 @@ function recordIsNewer(shared, local) {
   return sharedTime > localTime;
 }
 
-async function clearStaleSharedRecords(activeSharedIds) {
+async function clearStaleSharedRecords(activeSharedIds, options = {}) {
+  const targetIds = options.targetIds || null;
   const records = await getAllRecords();
   let cleared = 0;
   for (const record of records) {
     if (!record?.id || !SLOT_BY_ID[record.id]) continue;
+    if (targetIds && !targetIds.has(record.id)) continue;
     if (activeSharedIds.has(record.id)) continue;
     if (isDeletedRecord(record) || hasPendingRecord(record) || isLocalBrowserRecord(record)) continue;
     if (!isSharedLibraryRecord(record)) continue;

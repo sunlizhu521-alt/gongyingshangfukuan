@@ -20,6 +20,8 @@ const SALES_INVENTORY_TREND_YEARS = ["2025", "2026"];
 const SALES_INVENTORY_TREND_YEAR_COLORS = { "2025": "#007aff", "2026": "#34c759" };
 const EXCLUDED_SALES_PRODUCT_VALUES = new Set(["其他/配件", "健康办公", "护理床附件"].map(normalizeSalesExclusionText));
 
+const SALES_ANALYSIS_REQUIRED_RECORD_IDS = ["sales-data", "dim-product", "dim-store-name", "dim-customer-material"];
+
 let salesRows = [];
 let filteredRows = [];
 let salesInventoryTrendSummaries = [];
@@ -41,7 +43,16 @@ document.addEventListener("DOMContentLoaded", async () => {
 });
 
 async function refreshSalesAnalysis() {
-  await loadSharedLibrary({ statusEl: $("#salesStatus") });
+  $("#salesStatus").textContent = "正在从腾讯云读取销售数据文件...";
+  await loadSharedLibrary({
+    statusEl: $("#salesStatus"),
+    ids: SALES_ANALYSIS_REQUIRED_RECORD_IDS,
+    force: true,
+    onProgress: ({ percent, message }) => {
+      const value = Number.isFinite(Number(percent)) ? ` ${Math.round(Number(percent))}%` : "";
+      $("#salesStatus").textContent = `${message || "正在从腾讯云读取销售数据文件..."}${value}`;
+    }
+  });
   const records = Object.fromEntries((await getActiveRecords()).map((record) => [record.id, record]));
   const salesRecord = records["sales-data"];
   const productMap = mapProducts(records["dim-product"]?.rows || []);
@@ -51,6 +62,18 @@ async function refreshSalesAnalysis() {
   if (!salesRecord) {
     salesRows = [];
     $("#salesStatus").textContent = "缺少销售数据文件，请先到销售数据文件页面上传并应用。";
+    populateFilters([]);
+    renderSalesInventoryTrendDashboard([]);
+    renderSalesAnalysis();
+    return;
+  }
+
+  if (!Array.isArray(salesRecord.rows) || !salesRecord.rows.length) {
+    salesRows = [];
+    const parseText = salesRecord.parseStatus && salesRecord.parseStatus !== "ready"
+      ? `腾讯云已找到销售数据文件，当前状态：${salesRecord.parseStatus}，请稍后刷新。`
+      : "腾讯云已找到销售数据文件，但完整解析数据还未就绪，请稍后刷新。";
+    $("#salesStatus").textContent = parseText;
     populateFilters([]);
     renderSalesInventoryTrendDashboard([]);
     renderSalesAnalysis();
