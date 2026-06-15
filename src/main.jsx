@@ -46,6 +46,16 @@ const SYSTEM_FILE_LIBRARY_PAGES = [
   { tab: 'systemSalesInventoryFiles', key: 'salesInventoryFiles', label: '销售库存看板文件' }
 ];
 
+const MAINTENANCE_LIBRARY_MENU_PAGES = [
+  ...MAINTENANCE_LIBRARY_PAGES,
+  { tab: 'suppliers', key: 'supplierManagement', label: '供应商管理维度表' }
+];
+
+const SYSTEM_FILE_LIBRARY_MENU_PAGES = [
+  { tab: 'invoiceInventory', key: 'invoiceInventory', label: '发票信息库存查看' },
+  ...SYSTEM_FILE_LIBRARY_PAGES
+];
+
 function createInspectionNoticeRow(values = {}) {
   return INSPECTION_NOTICE_FIELDS.reduce((row, field) => ({
     ...row,
@@ -103,10 +113,7 @@ function App() {
       label: '供应商付款提醒',
       children: [
         { value: 'supplierPayment.ledger', tab: 'ledger', label: '供应商付款看板' },
-        { value: 'supplierPayment.upload', tab: 'upload', label: '发票上传' },
-        { value: 'supplierPayment.invoiceInventory', tab: 'invoiceInventory', label: '发票信息库存查看' },
-        { value: 'supplierPayment.supplierManagement', tab: 'suppliers', label: '供应商管理维度表' },
-        { value: 'supplierPayment.reminders', tab: 'reminders', label: '操作日志' }
+        { value: 'supplierPayment.upload', tab: 'upload', label: '发票上传' }
       ]
     },
     {
@@ -134,7 +141,7 @@ function App() {
     {
       value: 'maintenanceLibrary',
       label: '维护文件库',
-      children: MAINTENANCE_LIBRARY_PAGES.map((page) => ({
+      children: MAINTENANCE_LIBRARY_MENU_PAGES.map((page) => ({
         value: `maintenanceLibrary.${page.key}`,
         tab: page.tab,
         label: page.label
@@ -145,14 +152,15 @@ function App() {
       label: '系统管理',
       fixedOwnerOnly: true,
       children: [
-        { value: 'systemManagement.permissionManagement', tab: 'permissionManagement', label: '权限管理' }
+        { value: 'systemManagement.permissionManagement', tab: 'permissionManagement', label: '权限管理' },
+        { value: 'systemManagement.reminders', tab: 'reminders', label: '操作日志' }
       ]
     },
     {
       value: 'systemFileLibrary',
       label: '系统文件库',
       fixedOwnerOnly: true,
-      children: SYSTEM_FILE_LIBRARY_PAGES.map((page) => ({
+      children: SYSTEM_FILE_LIBRARY_MENU_PAGES.map((page) => ({
         value: `systemFileLibrary.${page.key}`,
         tab: page.tab,
         label: page.label
@@ -165,9 +173,6 @@ function App() {
   const legacyPermissionMap = {
     'supplierPayment.ledger': ['supplierPayment'],
     'supplierPayment.upload': ['supplierPayment'],
-    'supplierPayment.reminders': ['supplierPayment'],
-    'supplierPayment.invoiceInventory': ['invoiceInventory'],
-    'supplierPayment.supplierManagement': ['supplierManagement'],
     'qualityInspection.inspectionNotice': ['qualityInspection'],
     'qualityInspection.inspectionSchedule': ['qualityInspection'],
     'qualityInspection.inspectionReportUpload': ['qualityInspection'],
@@ -179,7 +184,10 @@ function App() {
     'maintenanceLibrary.factLibrary': ['maintenanceLibrary', 'salesInventory', 'salesInventory.factLibrary'],
     'maintenanceLibrary.salesLibrary': ['maintenanceLibrary', 'salesInventory', 'salesInventory.salesLibrary'],
     'maintenanceLibrary.fileLibrary': ['maintenanceLibrary', 'salesInventory', 'salesInventory.fileLibrary'],
+    'maintenanceLibrary.supplierManagement': ['maintenanceLibrary', 'supplierManagement', 'supplierPayment.supplierManagement'],
     'systemManagement.permissionManagement': ['permissionManagement'],
+    'systemManagement.reminders': ['systemManagement', 'supplierPayment.reminders'],
+    'systemFileLibrary.invoiceInventory': ['systemFileLibrary', 'invoiceInventory', 'supplierPayment.invoiceInventory'],
     ...Object.fromEntries(SYSTEM_FILE_LIBRARY_PAGES.map((page) => [`systemFileLibrary.${page.key}`, ['systemFileLibrary']]))
   };
   function hasPermission(permission) {
@@ -202,8 +210,6 @@ function App() {
   const canManagePermissions = user?.name === systemOwnerName;
   const canManageSystemFiles = user?.name === systemOwnerName;
   const canAccessSupplierPayment = canAccessGroup('supplierPayment');
-  const canManageInvoiceInventory = canAccessTab('invoiceInventory');
-  const canManageSuppliers = canAccessTab('suppliers');
   const canAccessQualityInspection = canAccessGroup('qualityInspection');
   const canAccessSalesInventory = canAccessGroup('salesInventory');
   const canAccessMaintenanceLibrary = canAccessGroup('maintenanceLibrary');
@@ -313,7 +319,7 @@ function App() {
     if (user && !canManagePermissions && activeTab === 'permissionManagement') {
       openFirstAllowedTab();
     }
-  }, [activeTab, canAccessMaintenanceLibrary, canAccessQualityInspection, canAccessSalesInventory, canAccessSupplierPayment, canAccessSystemFileLibrary, canManageInvoiceInventory, canManagePermissions, canManageSuppliers, user]);
+  }, [activeTab, canAccessMaintenanceLibrary, canAccessQualityInspection, canAccessSalesInventory, canAccessSupplierPayment, canAccessSystemFileLibrary, canManagePermissions, user]);
 
   useEffect(() => {
     function closeFilters() {
@@ -1082,15 +1088,6 @@ function App() {
                 {canAccessTab('upload') && (
                   <button className={activeTab === 'upload' ? 'active' : ''} onClick={() => openMenuTab('upload', 'supplierPayment')}>发票上传</button>
                 )}
-                {canManageInvoiceInventory && (
-                  <button className={activeTab === 'invoiceInventory' ? 'active' : ''} onClick={() => openMenuTab('invoiceInventory', 'supplierPayment')}>发票信息库存查看</button>
-                )}
-                {canManageSuppliers && (
-                  <button className={activeTab === 'suppliers' ? 'active' : ''} onClick={() => openMenuTab('suppliers', 'supplierPayment')}>供应商管理维度表</button>
-                )}
-                {canAccessTab('reminders') && (
-                  <button className={activeTab === 'reminders' ? 'active' : ''} onClick={() => openMenuTab('reminders', 'supplierPayment')}>操作日志</button>
-                )}
               </div>
             )}
           </div>
@@ -1172,7 +1169,7 @@ function App() {
             </button>
             {activeMenuGroup === 'maintenanceLibrary' && (
               <div className="submenu-list">
-                {MAINTENANCE_LIBRARY_PAGES.filter((page) => canAccessTab(page.tab)).map((page) => (
+                {MAINTENANCE_LIBRARY_MENU_PAGES.filter((page) => canAccessTab(page.tab)).map((page) => (
                   <button
                     key={page.tab}
                     className={activeTab === page.tab ? 'active' : ''}
@@ -1198,7 +1195,7 @@ function App() {
             </button>
             {activeMenuGroup === 'systemFileLibrary' && (
               <div className="submenu-list">
-                {SYSTEM_FILE_LIBRARY_PAGES.filter((page) => canAccessTab(page.tab)).map((page) => (
+                {SYSTEM_FILE_LIBRARY_MENU_PAGES.filter((page) => canAccessTab(page.tab)).map((page) => (
                   <button
                     key={page.tab}
                     className={activeTab === page.tab ? 'active' : ''}
@@ -1225,6 +1222,7 @@ function App() {
             {activeMenuGroup === 'systemManagement' && (
               <div className="submenu-list">
                 <button className={activeTab === 'permissionManagement' ? 'active' : ''} onClick={() => openMenuTab('permissionManagement', 'systemManagement')}>权限管理</button>
+                <button className={activeTab === 'reminders' ? 'active' : ''} onClick={() => openMenuTab('reminders', 'systemManagement')}>操作日志</button>
               </div>
             )}
           </div>

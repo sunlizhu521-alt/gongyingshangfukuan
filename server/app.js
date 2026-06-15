@@ -35,9 +35,11 @@ const SALES_INVENTORY_PERMISSIONS = [
 const MAINTENANCE_LIBRARY_PERMISSIONS = [
   'maintenanceLibrary.factLibrary',
   'maintenanceLibrary.salesLibrary',
-  'maintenanceLibrary.fileLibrary'
+  'maintenanceLibrary.fileLibrary',
+  'maintenanceLibrary.supplierManagement'
 ];
 const SYSTEM_FILE_LIBRARY_PERMISSIONS = [
+  'systemFileLibrary.invoiceInventory',
   'systemFileLibrary.migrationPackage',
   'systemFileLibrary.invoiceUploads',
   'systemFileLibrary.salesInventoryFiles'
@@ -70,10 +72,7 @@ const PERMISSION_GROUPS = [
     value: 'supplierPayment',
     children: [
       'supplierPayment.ledger',
-      'supplierPayment.upload',
-      'supplierPayment.invoiceInventory',
-      'supplierPayment.supplierManagement',
-      'supplierPayment.reminders'
+      'supplierPayment.upload'
     ]
   },
   {
@@ -102,7 +101,7 @@ const PERMISSION_GROUPS = [
   },
   {
     value: 'systemManagement',
-    children: ['systemManagement.permissionManagement']
+    children: ['systemManagement.permissionManagement', 'systemManagement.reminders']
   }
 ];
 const PERMISSION_KEYS = PERMISSION_GROUPS.flatMap((group) => [group.value, ...group.children]);
@@ -110,9 +109,10 @@ const OWNER_PERMISSIONS = [...PERMISSION_KEYS];
 const DEFAULT_PERMISSIONS = [];
 
 function expandPermissionKey(permission) {
-  if (permission === 'supplierPayment') return ['supplierPayment', 'supplierPayment.ledger', 'supplierPayment.upload', 'supplierPayment.reminders'];
-  if (permission === 'invoiceInventory') return ['supplierPayment', 'supplierPayment.invoiceInventory'];
-  if (permission === 'supplierManagement') return ['supplierPayment', 'supplierPayment.supplierManagement'];
+  if (permission === 'supplierPayment') return ['supplierPayment', 'supplierPayment.ledger', 'supplierPayment.upload'];
+  if (permission === 'supplierPayment.invoiceInventory' || permission === 'invoiceInventory') return ['systemFileLibrary', 'systemFileLibrary.invoiceInventory'];
+  if (permission === 'supplierPayment.supplierManagement' || permission === 'supplierManagement') return ['maintenanceLibrary', 'maintenanceLibrary.supplierManagement'];
+  if (permission === 'supplierPayment.reminders') return ['systemManagement', 'systemManagement.reminders'];
   if (permission === 'qualityInspection') {
     const group = PERMISSION_GROUPS.find((item) => item.value === 'qualityInspection');
     return [group.value, ...group.children];
@@ -124,7 +124,7 @@ function expandPermissionKey(permission) {
   if (permission === 'salesInventory.fileLibrary') return ['maintenanceLibrary', 'maintenanceLibrary.fileLibrary'];
   if (permission === 'systemFileLibrary') return ['systemFileLibrary', ...SYSTEM_FILE_LIBRARY_PERMISSIONS];
   if (permission === 'permissionManagement') return ['systemManagement', 'systemManagement.permissionManagement'];
-  if (permission === 'systemManagement') return ['systemManagement', 'systemManagement.permissionManagement'];
+  if (permission === 'systemManagement') return ['systemManagement', 'systemManagement.permissionManagement', 'systemManagement.reminders'];
   const group = PERMISSION_GROUPS.find((item) => item.children.includes(permission));
   if (group) return [group.value, permission];
   return [permission];
@@ -563,10 +563,17 @@ function canSeeAllRole(role) {
   return [ROLE_ADMIN, ROLE_FINANCE].includes(role);
 }
 
+const LEGACY_PERMISSION_ALIASES = {
+  'systemFileLibrary.invoiceInventory': ['supplierPayment.invoiceInventory', 'invoiceInventory'],
+  'maintenanceLibrary.supplierManagement': ['supplierPayment.supplierManagement', 'supplierManagement'],
+  'systemManagement.reminders': ['supplierPayment.reminders']
+};
+
 function hasUserPermission(user, permission) {
   if (!user) return false;
   if (user.name === SYSTEM_OWNER_NAME) return true;
-  return Array.isArray(user.permissions) && user.permissions.includes(permission);
+  const permissions = Array.isArray(user.permissions) ? user.permissions : [];
+  return permissions.includes(permission) || (LEGACY_PERMISSION_ALIASES[permission] || []).some((item) => permissions.includes(item));
 }
 
 function requirePermission(db, req, res, permission) {
@@ -1136,7 +1143,7 @@ app.patch('/api/invoices/:id', async (req, res) => {
 
 app.delete('/api/invoices/:id', async (req, res) => {
   const db = await ensureDb();
-  const requestUser = requirePermission(db, req, res, 'supplierPayment.invoiceInventory');
+  const requestUser = requirePermission(db, req, res, 'systemFileLibrary.invoiceInventory');
   if (!requestUser) return;
   const invoice = db.invoices.find((item) => item.id === req.params.id);
   if (!invoice) return res.status(404).json({ error: 'not found' });
@@ -1256,7 +1263,7 @@ app.get('/api/suppliers', async (req, res) => {
 
 app.post('/api/suppliers', async (req, res) => {
   const db = await ensureDb();
-  if (!requirePermission(db, req, res, 'supplierPayment.supplierManagement')) return;
+  if (!requirePermission(db, req, res, 'maintenanceLibrary.supplierManagement')) return;
   const supplier = { id: crypto.randomUUID(), name: req.body.name, termDays: Number(req.body.termDays || 30) };
   db.suppliers.unshift(supplier);
   await saveDb(db);
@@ -1266,7 +1273,7 @@ app.post('/api/suppliers', async (req, res) => {
 app.post('/api/suppliers/import-terms', upload.single('file'), async (req, res) => {
   const db = await ensureDb();
   if (!req.file) return res.status(400).json({ error: 'missing file' });
-  if (!requirePermission(db, req, res, 'supplierPayment.supplierManagement')) {
+  if (!requirePermission(db, req, res, 'maintenanceLibrary.supplierManagement')) {
     await removeUploadedFile(req.file.filename);
     return;
   }
@@ -1308,7 +1315,7 @@ app.get('/api/owners', async (req, res) => {
 
 app.post('/api/owners', async (req, res) => {
   const db = await ensureDb();
-  if (!requirePermission(db, req, res, 'supplierPayment.supplierManagement')) return;
+  if (!requirePermission(db, req, res, 'maintenanceLibrary.supplierManagement')) return;
   const owner = { id: crypto.randomUUID(), owner: req.body.owner, supplier: req.body.supplier };
   db.owners.unshift(owner);
   await saveDb(db);
@@ -1318,7 +1325,7 @@ app.post('/api/owners', async (req, res) => {
 app.post('/api/owners/import', upload.single('file'), async (req, res) => {
   const db = await ensureDb();
   if (!req.file) return res.status(400).json({ error: 'missing file' });
-  if (!requirePermission(db, req, res, 'supplierPayment.supplierManagement')) {
+  if (!requirePermission(db, req, res, 'maintenanceLibrary.supplierManagement')) {
     await removeUploadedFile(req.file.filename);
     return;
   }
