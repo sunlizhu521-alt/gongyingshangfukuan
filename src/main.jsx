@@ -29,14 +29,7 @@ const SALES_INVENTORY_PAGES = [
   { tab: 'salesInventoryReceiptSummary', key: 'receiptSummary', label: '供应链库存分析', sourceFile: 'receipt-summary.html' },
   { tab: 'salesInventorySalesAnalysis', key: 'salesAnalysis', label: '销售数据分析', sourceFile: 'sales-analysis.html' },
   { tab: 'salesInventoryComparison', key: 'comparison', label: '表格对比分析', sourceFile: 'comparison.html' },
-  { tab: 'salesInventoryErrors', key: 'errors', label: '报错信息提示', sourceFile: 'errors.html' },
-  { tab: 'salesInventoryTrendTemplate', key: 'inventoryTrendTemplate', label: '库存货值-模板', sourceFile: 'inventory-trend.html' },
-  { tab: 'salesInventoryOver120Template', key: 'over120Template', label: '120天以上库存导航-模板', sourceFile: 'over-120.html' },
-  { tab: 'salesInventoryStaticReport', key: 'staticReport', label: '静态汇报页', sourceFile: 'inventory-static-report.html' },
-  { tab: 'salesInventoryOverseasReport', key: 'overseasReport', label: '海外事业部报告', sourceFile: 'overseas-report.html' },
-  { tab: 'salesInventoryOverseasSecondReport', key: 'overseasSecondReport', label: '海外事业二部报告', sourceFile: 'overseas-second-report.html' },
-  { tab: 'salesInventoryDomesticReport', key: 'domesticReport', label: '国内事业部报告', sourceFile: 'domestic-report.html' },
-  { tab: 'salesInventoryGlobalBusinessReport', key: 'globalBusinessReport', label: '全球招商部报告', sourceFile: 'global-business-report.html' }
+  { tab: 'salesInventoryErrors', key: 'errors', label: '报错信息提示', sourceFile: 'errors.html' }
 ];
 
 const MAINTENANCE_LIBRARY_PAGES = [

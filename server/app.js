@@ -30,14 +30,7 @@ const SALES_INVENTORY_PERMISSIONS = [
   'salesInventory.receiptSummary',
   'salesInventory.salesAnalysis',
   'salesInventory.comparison',
-  'salesInventory.errors',
-  'salesInventory.inventoryTrendTemplate',
-  'salesInventory.over120Template',
-  'salesInventory.staticReport',
-  'salesInventory.overseasReport',
-  'salesInventory.overseasSecondReport',
-  'salesInventory.domesticReport',
-  'salesInventory.globalBusinessReport'
+  'salesInventory.errors'
 ];
 const MAINTENANCE_LIBRARY_PERMISSIONS = [
   'maintenanceLibrary.factLibrary',
