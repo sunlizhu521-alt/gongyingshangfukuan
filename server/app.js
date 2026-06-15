@@ -29,9 +29,6 @@ const SALES_INVENTORY_PERMISSIONS = [
   'salesInventory.receiptSummary',
   'salesInventory.salesAnalysis',
   'salesInventory.comparison',
-  'salesInventory.factLibrary',
-  'salesInventory.salesLibrary',
-  'salesInventory.fileLibrary',
   'salesInventory.errors',
   'salesInventory.inventoryTrendTemplate',
   'salesInventory.over120Template',
@@ -40,6 +37,11 @@ const SALES_INVENTORY_PERMISSIONS = [
   'salesInventory.overseasSecondReport',
   'salesInventory.domesticReport',
   'salesInventory.globalBusinessReport'
+];
+const MAINTENANCE_LIBRARY_PERMISSIONS = [
+  'maintenanceLibrary.factLibrary',
+  'maintenanceLibrary.salesLibrary',
+  'maintenanceLibrary.fileLibrary'
 ];
 const PERMISSION_GROUPS = [
   {
@@ -69,6 +71,10 @@ const PERMISSION_GROUPS = [
     children: SALES_INVENTORY_PERMISSIONS
   },
   {
+    value: 'maintenanceLibrary',
+    children: MAINTENANCE_LIBRARY_PERMISSIONS
+  },
+  {
     value: 'systemManagement',
     children: ['systemManagement.permissionManagement']
   }
@@ -86,6 +92,10 @@ function expandPermissionKey(permission) {
     return [group.value, ...group.children];
   }
   if (permission === 'salesInventory') return ['salesInventory', ...SALES_INVENTORY_PERMISSIONS];
+  if (permission === 'maintenanceLibrary') return ['maintenanceLibrary', ...MAINTENANCE_LIBRARY_PERMISSIONS];
+  if (permission === 'salesInventory.factLibrary') return ['maintenanceLibrary', 'maintenanceLibrary.factLibrary'];
+  if (permission === 'salesInventory.salesLibrary') return ['maintenanceLibrary', 'maintenanceLibrary.salesLibrary'];
+  if (permission === 'salesInventory.fileLibrary') return ['maintenanceLibrary', 'maintenanceLibrary.fileLibrary'];
   if (permission === 'permissionManagement') return ['systemManagement', 'systemManagement.permissionManagement'];
   if (permission === 'systemManagement') return ['systemManagement', 'systemManagement.permissionManagement'];
   const group = PERMISSION_GROUPS.find((item) => item.children.includes(permission));

@@ -29,9 +29,6 @@ const SALES_INVENTORY_PAGES = [
   { tab: 'salesInventoryReceiptSummary', key: 'receiptSummary', label: '供应链库存分析', sourceFile: 'receipt-summary.html' },
   { tab: 'salesInventorySalesAnalysis', key: 'salesAnalysis', label: '销售数据分析', sourceFile: 'sales-analysis.html' },
   { tab: 'salesInventoryComparison', key: 'comparison', label: '表格对比分析', sourceFile: 'comparison.html' },
-  { tab: 'salesInventoryFactLibrary', key: 'factLibrary', label: '库存数据文件', sourceFile: 'fact-library.html' },
-  { tab: 'salesInventorySalesLibrary', key: 'salesLibrary', label: '销售数据文件', sourceFile: 'sales-library.html' },
-  { tab: 'salesInventoryFileLibrary', key: 'fileLibrary', label: '维度表文件库', sourceFile: 'file-library.html' },
   { tab: 'salesInventoryErrors', key: 'errors', label: '报错信息提示', sourceFile: 'errors.html' },
   { tab: 'salesInventoryTrendTemplate', key: 'inventoryTrendTemplate', label: '库存货值-模板', sourceFile: 'inventory-trend.html' },
   { tab: 'salesInventoryOver120Template', key: 'over120Template', label: '120天以上库存导航-模板', sourceFile: 'over-120.html' },
@@ -41,6 +38,14 @@ const SALES_INVENTORY_PAGES = [
   { tab: 'salesInventoryDomesticReport', key: 'domesticReport', label: '国内事业部报告', sourceFile: 'domestic-report.html' },
   { tab: 'salesInventoryGlobalBusinessReport', key: 'globalBusinessReport', label: '全球招商部报告', sourceFile: 'global-business-report.html' }
 ];
+
+const MAINTENANCE_LIBRARY_PAGES = [
+  { tab: 'maintenanceFactLibrary', key: 'factLibrary', label: '库存数据文件', sourceFile: 'fact-library.html' },
+  { tab: 'maintenanceSalesLibrary', key: 'salesLibrary', label: '销售数据文件', sourceFile: 'sales-library.html' },
+  { tab: 'maintenanceFileLibrary', key: 'fileLibrary', label: '维度表文件库', sourceFile: 'file-library.html' }
+];
+
+const EMBEDDED_KCFX_PAGES = [...SALES_INVENTORY_PAGES, ...MAINTENANCE_LIBRARY_PAGES];
 
 function createInspectionNoticeRow(values = {}) {
   return INSPECTION_NOTICE_FIELDS.reduce((row, field) => ({
@@ -127,6 +132,15 @@ function App() {
       }))
     },
     {
+      value: 'maintenanceLibrary',
+      label: '维护文件库',
+      children: MAINTENANCE_LIBRARY_PAGES.map((page) => ({
+        value: `maintenanceLibrary.${page.key}`,
+        tab: page.tab,
+        label: page.label
+      }))
+    },
+    {
       value: 'systemManagement',
       label: '系统管理',
       fixedOwnerOnly: true,
@@ -152,6 +166,9 @@ function App() {
     'qualityInspection.inspectionSummary': ['qualityInspection'],
     'qualityInspection.inspectionInitialData': ['qualityInspection'],
     ...Object.fromEntries(SALES_INVENTORY_PAGES.map((page) => [`salesInventory.${page.key}`, ['salesInventory']])),
+    'maintenanceLibrary.factLibrary': ['maintenanceLibrary', 'salesInventory', 'salesInventory.factLibrary'],
+    'maintenanceLibrary.salesLibrary': ['maintenanceLibrary', 'salesInventory', 'salesInventory.salesLibrary'],
+    'maintenanceLibrary.fileLibrary': ['maintenanceLibrary', 'salesInventory', 'salesInventory.fileLibrary'],
     'systemManagement.permissionManagement': ['permissionManagement']
   };
   function hasPermission(permission) {
@@ -177,6 +194,7 @@ function App() {
   const canManageSuppliers = canAccessTab('suppliers');
   const canAccessQualityInspection = canAccessGroup('qualityInspection');
   const canAccessSalesInventory = canAccessGroup('salesInventory');
+  const canAccessMaintenanceLibrary = canAccessGroup('maintenanceLibrary');
   const qualityInspectionPages = {
     inspectionNotice: '验货通知',
     inspectionSchedule: '验货安排',
@@ -186,7 +204,7 @@ function App() {
     inspectionSummary: '验货信息汇总表',
     inspectionInitialData: '验货信息初始数据'
   };
-  const salesInventoryPageMap = Object.fromEntries(SALES_INVENTORY_PAGES.map((page) => [page.tab, page]));
+  const embeddedKcfxPageMap = Object.fromEntries(EMBEDDED_KCFX_PAGES.map((page) => [page.tab, page]));
 
   function openMenuTab(tab, group) {
     setActiveMenuGroup(group);
@@ -276,7 +294,7 @@ function App() {
     if (user && !canManagePermissions && activeTab === 'permissionManagement') {
       openFirstAllowedTab();
     }
-  }, [activeTab, canAccessQualityInspection, canAccessSalesInventory, canAccessSupplierPayment, canManageInvoiceInventory, canManagePermissions, canManageSuppliers, user]);
+  }, [activeTab, canAccessMaintenanceLibrary, canAccessQualityInspection, canAccessSalesInventory, canAccessSupplierPayment, canManageInvoiceInventory, canManagePermissions, canManageSuppliers, user]);
 
   useEffect(() => {
     function closeFilters() {
@@ -1106,6 +1124,32 @@ function App() {
             )}
           </div>
           )}
+          {canAccessMaintenanceLibrary && (
+          <div className="menu-group">
+            <button
+              type="button"
+              className={`menu-group-toggle ${activeMenuGroup === 'maintenanceLibrary' ? 'active' : ''}`}
+              onClick={() => toggleMenuGroup('maintenanceLibrary')}
+              aria-expanded={activeMenuGroup === 'maintenanceLibrary'}
+            >
+              维护文件库
+              <span>{activeMenuGroup === 'maintenanceLibrary' ? '▾' : '▸'}</span>
+            </button>
+            {activeMenuGroup === 'maintenanceLibrary' && (
+              <div className="submenu-list">
+                {MAINTENANCE_LIBRARY_PAGES.filter((page) => canAccessTab(page.tab)).map((page) => (
+                  <button
+                    key={page.tab}
+                    className={activeTab === page.tab ? 'active' : ''}
+                    onClick={() => openMenuTab(page.tab, 'maintenanceLibrary')}
+                  >
+                    {page.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          )}
           {canManagePermissions && (
           <div className="menu-group">
             <button
@@ -1735,13 +1779,13 @@ function App() {
           </section>
         )}
 
-        {salesInventoryPageMap[activeTab] && canAccessTab(activeTab) && (
+        {embeddedKcfxPageMap[activeTab] && canAccessTab(activeTab) && (
           <section className="embedded-dashboard-panel">
             <div className="embedded-dashboard-header">
-              <h2>{salesInventoryPageMap[activeTab].label}</h2>
+              <h2>{embeddedKcfxPageMap[activeTab].label}</h2>
               <a
                 className="ghost embedded-dashboard-link"
-                href={`/kcfx/${salesInventoryPageMap[activeTab].sourceFile}`}
+                href={`/kcfx/${embeddedKcfxPageMap[activeTab].sourceFile}`}
                 target="_blank"
                 rel="noreferrer"
               >
@@ -1749,8 +1793,8 @@ function App() {
               </a>
             </div>
             <iframe
-              title={salesInventoryPageMap[activeTab].label}
-              src={`/kcfx/${salesInventoryPageMap[activeTab].sourceFile}`}
+              title={embeddedKcfxPageMap[activeTab].label}
+              src={`/kcfx/${embeddedKcfxPageMap[activeTab].sourceFile}`}
               onLoad={applyEmbeddedDashboardChrome}
             />
           </section>
