@@ -20,7 +20,7 @@ const app = express();
 const upload = multer({ dest: uploadDir });
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '200mb' }));
 
 const SYSTEM_OWNER_NAME = '孙立柱';
 const ROLE_ADMIN = '管理员';
@@ -446,6 +446,14 @@ function normalizeDb(db) {
       ...(db.qualityInspection?.notices || {})
     }
   };
+  db.kcfxLibrary = {
+    schemaVersion: 1,
+    project: 'kcfx',
+    savedAt: '',
+    records: {},
+    ...(db.kcfxLibrary || {})
+  };
+  db.kcfxLibrary.records = db.kcfxLibrary.records || {};
   return db;
 }
 
@@ -1470,6 +1478,61 @@ app.patch('/api/settings', async (req, res) => {
   }
   await saveDb(db);
   res.json(publicSettingsForUser(db.settings, requestUser));
+});
+
+function publicKcfxLibrary(db) {
+  return {
+    schemaVersion: db.kcfxLibrary?.schemaVersion || 1,
+    project: 'kcfx',
+    savedAt: db.kcfxLibrary?.savedAt || '',
+    records: db.kcfxLibrary?.records || {}
+  };
+}
+
+function sanitizeKcfxLibraryRecord(id, record = {}) {
+  return {
+    ...record,
+    id,
+    rows: Array.isArray(record.rows) ? record.rows : [],
+    savedAt: record.savedAt || new Date().toISOString(),
+    appliedAt: record.appliedAt || record.savedAt || new Date().toISOString()
+  };
+}
+
+app.get('/api/kcfx-library', async (req, res) => {
+  const db = await ensureDb();
+  res.json(publicKcfxLibrary(db));
+});
+
+app.put('/api/kcfx-library/records/:id', async (req, res) => {
+  const db = await ensureDb();
+  const requestUser = requireSystemOwner(db, req, res);
+  if (!requestUser) return;
+  const id = String(req.params.id || '').trim();
+  if (!id) return res.status(400).json({ error: 'missing id' });
+  const record = sanitizeKcfxLibraryRecord(id, req.body.record || req.body);
+  db.kcfxLibrary.records[id] = {
+    ...record,
+    serverSavedAt: new Date().toISOString(),
+    serverSavedBy: requestUser.name
+  };
+  db.kcfxLibrary.savedAt = new Date().toISOString();
+  pushLog(db, '文件库更新', requestUser.name, `${requestUser.name} 更新销售及库存看板文件库：${record.title || id}`);
+  await saveDb(db);
+  res.json({ ok: true, library: publicKcfxLibrary(db), record: db.kcfxLibrary.records[id] });
+});
+
+app.delete('/api/kcfx-library/records/:id', async (req, res) => {
+  const db = await ensureDb();
+  const requestUser = requireSystemOwner(db, req, res);
+  if (!requestUser) return;
+  const id = String(req.params.id || '').trim();
+  if (!id) return res.status(400).json({ error: 'missing id' });
+  delete db.kcfxLibrary.records[id];
+  db.kcfxLibrary.savedAt = new Date().toISOString();
+  pushLog(db, '文件库删除', requestUser.name, `${requestUser.name} 删除销售及库存看板文件库：${id}`);
+  await saveDb(db);
+  res.status(204).end();
 });
 
 app.get('/api/system-file-library', async (req, res) => {

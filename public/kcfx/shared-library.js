@@ -1,4 +1,6 @@
 const KC_FILE_LIBRARY_MANIFEST = "data/kcfx-library/manifest.json";
+const KC_SERVER_LIBRARY_API = "/api/kcfx-library";
+const KC_SYSTEM_OWNER_NAME = "孙立柱";
 let kcSharedLibraryLoadPromise = null;
 
 async function loadSharedLibrary(options = {}) {
@@ -21,6 +23,8 @@ function renderSharedLibraryStatus(statusEl, result) {
 
 async function loadKcfxFileLibrary(statusEl) {
   const cacheKey = `v=${Date.now()}`;
+  const serverResult = await loadServerKcfxFileLibrary(statusEl);
+  if (serverResult.ok) return serverResult;
   try {
     const response = await fetch(`${KC_FILE_LIBRARY_MANIFEST}?${cacheKey}`, { cache: "no-store" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -55,6 +59,85 @@ async function loadKcfxFileLibrary(statusEl) {
   } catch (error) {
     if (statusEl) statusEl.textContent = `文件库未加载：${error.message}`;
     return { ok: false, error };
+  }
+}
+
+async function loadServerKcfxFileLibrary(statusEl) {
+  try {
+    const response = await fetch(`${KC_SERVER_LIBRARY_API}?v=${Date.now()}`, { cache: "no-store" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const manifest = await response.json();
+    const result = await importLibraryManifestRecords(manifest);
+    if (statusEl) statusEl.textContent = buildSharedLibraryStatus(result.imported, result.cleared, result.sharedCount);
+    return { ok: true, ...result, manifest, source: "server" };
+  } catch (error) {
+    return { ok: false, error, source: "server" };
+  }
+}
+
+async function importLibraryManifestRecords(manifest) {
+  const entries = Object.entries(manifest.records || {});
+  let imported = 0;
+  for (const [id, record] of entries) {
+    if (!SLOT_BY_ID[id] || !Array.isArray(record.rows)) continue;
+    const nextRecord = {
+      ...record,
+      id,
+      appliedAt: record.appliedAt || record.serverSavedAt || record.savedAt || manifest.savedAt || "",
+      sharedSavedAt: record.serverSavedAt || manifest.savedAt || record.savedAt || "",
+      libraryPath: record.libraryPath || `${KC_SERVER_LIBRARY_API}/records/${id}`,
+      libraryManifestPath: KC_SERVER_LIBRARY_API
+    };
+    const local = await getRecord(id);
+    if (shouldImportSharedRecord(nextRecord, local)) {
+      await saveRecord(nextRecord);
+      imported += 1;
+    }
+  }
+  const cleared = await clearStaleSharedRecords(new Set(entries.map(([id]) => id)));
+  return { imported, cleared, sharedCount: entries.length, manifest };
+}
+
+function getKcfxCurrentUser() {
+  try {
+    return JSON.parse(localStorage.getItem("invoiceUser") || "null") || {};
+  } catch {
+    return {};
+  }
+}
+
+function canManageKcfxLibrary() {
+  return getKcfxCurrentUser().name === KC_SYSTEM_OWNER_NAME;
+}
+
+function kcfxUserQuery() {
+  const user = getKcfxCurrentUser();
+  return `user=${encodeURIComponent(user.name || "")}&role=${encodeURIComponent(user.role || "")}`;
+}
+
+async function saveKcfxServerRecord(record) {
+  if (!canManageKcfxLibrary()) throw new Error("只有孙立柱可以维护文件库。");
+  const response = await fetch(`${KC_SERVER_LIBRARY_API}/records/${encodeURIComponent(record.id)}?${kcfxUserQuery()}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...record, user: getKcfxCurrentUser().name || "" })
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(payload.error || `HTTP ${response.status}`);
+  }
+  const payload = await response.json();
+  return payload.record || record;
+}
+
+async function deleteKcfxServerRecord(id) {
+  if (!canManageKcfxLibrary()) throw new Error("只有孙立柱可以维护文件库。");
+  const response = await fetch(`${KC_SERVER_LIBRARY_API}/records/${encodeURIComponent(id)}?${kcfxUserQuery()}`, {
+    method: "DELETE"
+  });
+  if (!response.ok && response.status !== 404) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(payload.error || `HTTP ${response.status}`);
   }
 }
 

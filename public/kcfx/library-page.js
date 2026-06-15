@@ -3,6 +3,7 @@ const $ = (selector) => document.querySelector(selector);
 document.addEventListener("DOMContentLoaded", async () => {
   await loadSharedLibrary({ statusEl: $("#sharedStatus") });
   bindToolbar();
+  applyToolbarPermissions();
   await renderLibrary();
 });
 
@@ -13,6 +14,22 @@ function bindToolbar() {
   $("#downloadSharedBtn").addEventListener("click", downloadSharedLibrary);
   $("#importSharedBtn")?.addEventListener("click", () => $("#importSharedInput")?.click());
   $("#importSharedInput")?.addEventListener("change", importSharedLibraryFile);
+}
+
+function libraryCanManage() {
+  return typeof canManageKcfxLibrary === "function" && canManageKcfxLibrary();
+}
+
+function adminOnlyMessage() {
+  return "只有孙立柱可以维护文件库，其他账号只读取服务器最新文件。";
+}
+
+function applyToolbarPermissions() {
+  if (libraryCanManage()) return;
+  ["#applyAllBtn", "#clearCacheBtn", "#downloadSharedBtn", "#importSharedBtn", "#importSharedInput"].forEach((selector) => {
+    const el = $(selector);
+    if (el) el.style.display = "none";
+  });
 }
 
 async function refreshAll() {
@@ -96,6 +113,7 @@ async function renderLibrary() {
 
   $("#libraryGrid").innerHTML = slots.map((slot) => renderCard(slot, isDeletedRecord(records[slot.id]) ? null : records[slot.id], labels)).join("");
   bindCardEvents();
+  applyCardPermissions();
 }
 
 function latestSavedAt(slots, records) {
@@ -199,7 +217,27 @@ function bindCardEvents() {
   });
 }
 
+function applyCardPermissions() {
+  if (libraryCanManage()) return;
+  document.querySelectorAll(".slot-file-input").forEach((input) => {
+    input.disabled = true;
+  });
+  document.querySelectorAll("[data-save], [data-apply], [data-delete]").forEach((button) => {
+    button.disabled = true;
+    button.style.display = "none";
+  });
+  document.querySelectorAll(".drop-zone").forEach((zone) => {
+    zone.classList.add("readonly-zone");
+    zone.style.pointerEvents = "none";
+    const label = zone.querySelector("strong");
+    const note = zone.querySelector("span");
+    if (label) label.textContent = "文件由管理员维护";
+    if (note) note.textContent = adminOnlyMessage();
+  });
+}
+
 function bindSlotDropEvents(card) {
+  if (!libraryCanManage()) return;
   const slotId = card.dataset.slotId;
   if (!slotId) return;
   ["dragenter", "dragover"].forEach((eventName) => {
@@ -230,6 +268,11 @@ function firstDroppedFile(dataTransfer) {
 }
 
 function chooseSlotFile(slotId) {
+  if (!libraryCanManage()) {
+    const status = $(`#status-${slotId}`);
+    if (status) status.textContent = adminOnlyMessage();
+    return;
+  }
   const input = document.querySelector(`[data-file-input="${slotId}"]`);
   const status = $(`#status-${slotId}`);
   if (!input) return;
@@ -239,6 +282,11 @@ function chooseSlotFile(slotId) {
 }
 
 async function saveSlot(slotId) {
+  if (!libraryCanManage()) {
+    const status = $(`#status-${slotId}`);
+    if (status) status.textContent = adminOnlyMessage();
+    return;
+  }
   const slot = SLOT_BY_ID[slotId];
   const input = document.querySelector(`[data-file-input="${slotId}"]`);
   const status = $(`#status-${slotId}`);
@@ -252,7 +300,8 @@ async function saveSlot(slotId) {
     status.textContent = "正在解析文件...";
     const record = await readExcelFile(file, slot);
     if (!record.rows.length) throw new Error("文件未解析到有效行。");
-    await saveRecord({ ...record, appliedAt: new Date().toISOString() });
+    const nextRecord = await saveKcfxServerRecord({ ...record, appliedAt: new Date().toISOString() });
+    await saveRecord(nextRecord);
     status.textContent = "已保存并强制应用最新上传文件，刷新后看板也会读取这份文件。";
     await renderLibrary();
   } catch (error) {
@@ -261,6 +310,11 @@ async function saveSlot(slotId) {
 }
 
 async function saveSlotFile(slotId, file) {
+  if (!libraryCanManage()) {
+    const status = $(`#status-${slotId}`);
+    if (status) status.textContent = adminOnlyMessage();
+    return;
+  }
   const slot = SLOT_BY_ID[slotId];
   const status = $(`#status-${slotId}`);
   if (!slot || !status) return;
@@ -277,7 +331,8 @@ async function saveSlotFile(slotId, file) {
     status.textContent = "正在解析文件...";
     const record = await readExcelFile(file, slot);
     if (!record.rows.length) throw new Error("文件未解析到有效行。");
-    await saveRecord({ ...record, appliedAt: new Date().toISOString() });
+    const nextRecord = await saveKcfxServerRecord({ ...record, appliedAt: new Date().toISOString() });
+    await saveRecord(nextRecord);
     status.textContent = "已保存并强制应用最新上传文件，刷新后看板也会读取这份文件。";
     await renderLibrary();
   } catch (error) {
@@ -301,11 +356,17 @@ function formatUploadError(error) {
 }
 
 async function applySlot(slotId) {
+  if (!libraryCanManage()) {
+    const status = $(`#status-${slotId}`);
+    if (status) status.textContent = adminOnlyMessage();
+    return;
+  }
   const record = await getRecord(slotId);
   if (!record) return;
   const nextRecord = promotePendingRecord(record);
   if (!nextRecord) return;
-  await saveRecord(nextRecord);
+  const serverRecord = await saveKcfxServerRecord(nextRecord);
+  await saveRecord(serverRecord);
   await renderLibrary();
   const status = $(`#status-${slotId}`);
   if (status) status.textContent = "应用成功，当前页面和看板会读取这份文件。";
@@ -313,12 +374,22 @@ async function applySlot(slotId) {
 }
 
 async function clearSlot(slotId) {
+  if (!libraryCanManage()) {
+    const status = $(`#status-${slotId}`);
+    if (status) status.textContent = adminOnlyMessage();
+    return;
+  }
   if (!window.confirm(`确认删除：${SLOT_BY_ID[slotId]?.title || slotId}？删除后刷新不会再从库存分析看板文件库自动恢复。`)) return;
+  await deleteKcfxServerRecord(slotId);
   await deleteRecord(slotId);
   await renderLibrary();
 }
 
 async function clearAllLibraryCache() {
+  if (!libraryCanManage()) {
+    setLibraryStatus(adminOnlyMessage());
+    return;
+  }
   const slots = pageSlots();
   if (!window.confirm("确认清除当前页面的文件缓存？清除后需要重新上传本页面文件。")) return;
   setLibraryStatus("正在清除当前页面文件缓存...");
