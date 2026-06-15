@@ -21,7 +21,12 @@ const dbPath = path.join(dataDir, 'db.json');
 const kcfxDir = path.join(rootDir, 'public', 'kcfx');
 
 const app = express();
-const upload = multer({ dest: uploadDir });
+const upload = multer({
+  dest: uploadDir,
+  limits: {
+    fieldSize: 200 * 1024 * 1024
+  }
+});
 
 app.use(cors());
 app.use(express.json({ limit: '200mb' }));
@@ -1815,6 +1820,47 @@ function buildQueuedKcfxFileRecord(file, storedFile, slot, previousRecord, reque
   };
 }
 
+function parseKcfxClientRecordPayload(payload) {
+  if (!payload) return null;
+  try {
+    const record = typeof payload === 'string' ? JSON.parse(payload) : payload;
+    if (!Array.isArray(record?.rows)) return null;
+    return record;
+  } catch {
+    return null;
+  }
+}
+
+function buildKcfxClientParsedFileRecord(file, storedFile, slot, clientRecord) {
+  const completedAt = new Date().toISOString();
+  const diagnostics = clientRecord.parseDiagnostics || {};
+  return {
+    id: slot.id,
+    type: slot.type,
+    title: slot.title,
+    expectedName: slot.expectedName,
+    fileName: file.originalname,
+    size: file.size,
+    lastModified: Number(clientRecord.lastModified || Date.now()),
+    savedAt: completedAt,
+    appliedAt: completedAt,
+    sheetName: clientRecord.sheetName || diagnostics.sheetName || '',
+    serverFileName: storedFile.fileName,
+    serverFilePath: storedFile.relativePath,
+    serverFileCategory: 'original',
+    serverFileLibrary: 'maintenance-library',
+    parseStatus: 'ready',
+    parseCompletedAt: completedAt,
+    parseSource: 'browser',
+    parseDiagnostics: {
+      ...diagnostics,
+      readMode: diagnostics.readMode || 'browser',
+      fallbackAttempts: Array.isArray(diagnostics.fallbackAttempts) ? diagnostics.fallbackAttempts : []
+    },
+    rows: clientRecord.rows
+  };
+}
+
 async function saveKcfxOriginalFile(slotId, file) {
   const savedAt = new Date();
   const year = format(savedAt, 'yyyy');
@@ -1948,6 +1994,20 @@ app.post('/api/kcfx-library/records/:id/upload', upload.single('file'), async (r
   try {
     const slot = parseKcfxSlotPayload(id, req.body.slot);
     storedFile = await saveKcfxOriginalFile(id, req.file);
+    const clientRecord = parseKcfxClientRecordPayload(req.body.record);
+    if (clientRecord) {
+      const record = buildKcfxClientParsedFileRecord(req.file, storedFile, slot, clientRecord);
+      db.kcfxLibrary.records[id] = {
+        ...record,
+        serverSavedAt: new Date().toISOString(),
+        serverSavedBy: requestUser.name
+      };
+      db.kcfxLibrary.savedAt = new Date().toISOString();
+      await removeKcfxStoredFile(previousRecord);
+      pushLog(db, 'kcfx file library uploaded', requestUser.name, `${requestUser.name} uploaded browser-parsed ${record.title || id}`);
+      await saveDb(db);
+      return res.json({ ok: true, parsedOnClient: true, library: publicKcfxLibrary(db), record: db.kcfxLibrary.records[id] });
+    }
     const queuedRecord = buildQueuedKcfxFileRecord(req.file, storedFile, slot, previousRecord, requestUser.name);
     db.kcfxLibrary.records[id] = queuedRecord;
     db.kcfxLibrary.savedAt = new Date().toISOString();

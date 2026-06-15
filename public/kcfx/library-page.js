@@ -68,7 +68,10 @@ async function uploadAllToServer() {
   let queued = 0;
   try {
     for (const { slot, file } of uploadableSlots) {
-      const serverRecord = await uploadKcfxServerFile(slot, file);
+      setLibraryStatus(`正在本地解析：${uploaded + 1}/${uploadableSlots.length}`);
+      const parsedRecord = await readExcelFile(file, slot);
+      setLibraryStatus(`正在上传到腾讯云服务器：${uploaded + 1}/${uploadableSlots.length}`);
+      const serverRecord = await uploadKcfxServerFile(slot, file, parsedRecord);
       await saveRecord(serverRecord);
       if (serverRecord?.parseStatus && serverRecord.parseStatus !== "ready") queued += 1;
       uploaded += 1;
@@ -378,8 +381,10 @@ async function saveSlot(slotId) {
 
   try {
     selectedServerFiles.set(slotId, file);
-    status.textContent = "正在上传原始文件到腾讯云服务器并解析...";
-    const nextRecord = await uploadKcfxServerFile(slot, file);
+    status.textContent = "正在本地解析文件...";
+    const parsedRecord = await readExcelFile(file, slot);
+    status.textContent = "正在上传原始文件和解析结果到腾讯云服务器...";
+    const nextRecord = await uploadKcfxServerFile(slot, file, parsedRecord);
     await saveRecord(nextRecord);
     if (nextRecord?.parseStatus && nextRecord.parseStatus !== "ready") {
       status.textContent = "已保存到腾讯云服务器，后台解析中。";
@@ -414,8 +419,10 @@ async function saveSlotFile(slotId, file) {
 
   try {
     selectedServerFiles.set(slotId, file);
-    status.textContent = "正在上传原始文件到腾讯云服务器并解析...";
-    const nextRecord = await uploadKcfxServerFile(slot, file);
+    status.textContent = "正在本地解析文件...";
+    const parsedRecord = await readExcelFile(file, slot);
+    status.textContent = "正在上传原始文件和解析结果到腾讯云服务器...";
+    const nextRecord = await uploadKcfxServerFile(slot, file, parsedRecord);
     await saveRecord(nextRecord);
     if (nextRecord?.parseStatus && nextRecord.parseStatus !== "ready") {
       status.textContent = "已保存到腾讯云服务器，后台解析中。";

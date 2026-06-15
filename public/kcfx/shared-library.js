@@ -158,11 +158,12 @@ async function saveKcfxServerRecord(record) {
   return payload.record || record;
 }
 
-async function uploadKcfxServerFile(slot, file) {
+async function uploadKcfxServerFile(slot, file, record = null) {
   if (!canManageKcfxLibrary()) throw new Error("只有孙立柱可以维护文件库。");
   const form = new FormData();
   form.append("file", file);
   form.append("user", getKcfxCurrentUser().name || "");
+  if (record) form.append("record", JSON.stringify(record));
   form.append("slot", JSON.stringify({
     id: slot.id,
     type: slot.type,
