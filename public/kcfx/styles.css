@@ -1182,12 +1182,17 @@ td.num {
   gap: 14px;
 }
 
+.library-summary .library-grid {
+  margin-top: 14px;
+  grid-template-columns: repeat(3, minmax(220px, 1fr));
+}
+
 .library-load-progress {
   margin-top: 12px;
   padding: 10px 12px;
-  border: 1px solid rgba(15, 23, 42, .10);
+  border: 1px solid rgba(10, 132, 255, .22);
   border-radius: 8px;
-  background: #fff;
+  background: linear-gradient(180deg, rgba(10, 132, 255, .06), rgba(255, 255, 255, .96));
 }
 
 .library-load-progress.is-hidden {

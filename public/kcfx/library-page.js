@@ -64,7 +64,10 @@ function startInitialLibrarySync() {
 
 function ensureLibraryLoadProgress() {
   let progress = $("#libraryLoadProgress");
-  if (progress) return progress;
+  if (progress) {
+    placeLibraryGridInSummary(progress);
+    return progress;
+  }
   const toolbar = document.querySelector(".toolbar");
   progress = document.createElement("div");
   progress.id = "libraryLoadProgress";
@@ -79,7 +82,15 @@ function ensureLibraryLoadProgress() {
     </div>
   `;
   toolbar?.insertAdjacentElement("afterend", progress);
+  placeLibraryGridInSummary(progress);
   return progress;
+}
+
+function placeLibraryGridInSummary(anchor = $("#libraryLoadProgress") || document.querySelector(".toolbar")) {
+  const grid = $("#libraryGrid");
+  const summary = document.querySelector(".library-summary");
+  if (!grid || !summary || grid.parentElement === summary) return;
+  anchor?.insertAdjacentElement("afterend", grid);
 }
 
 function setLibraryLoadProgress(percent, message, options = {}) {
@@ -235,6 +246,8 @@ async function renderLibrary() {
 }
 
 function renderLibraryFromRecords(records) {
+  ensureLibraryLoadProgress();
+  placeLibraryGridInSummary();
   const slots = pageSlots();
   const used = slots.filter((slot) => getDisplayRecord(records[slot.id])).length;
   const applied = slots.filter((slot) => records[slot.id]?.appliedAt && !isDeletedRecord(records[slot.id])).length;

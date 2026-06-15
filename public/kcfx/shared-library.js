@@ -207,12 +207,12 @@ async function saveKcfxServerRecord(record) {
   return payload.record || record;
 }
 
-async function uploadKcfxServerFile(slot, file, record = null) {
+async function uploadKcfxServerFile(slot, file, parsedRecord = null) {
   if (!canManageKcfxLibrary()) throw new Error("只有孙立柱可以维护文件库。");
   const form = new FormData();
   form.append("file", file);
   form.append("user", getKcfxCurrentUser().name || "");
-  if (record) form.append("record", JSON.stringify(record));
+  if (parsedRecord) form.append("record", JSON.stringify(parsedRecord));
   form.append("slot", JSON.stringify({
     id: slot.id,
     type: slot.type,
@@ -230,12 +230,12 @@ async function uploadKcfxServerFile(slot, file, record = null) {
     throw new Error(payload.error || `HTTP ${response.status}`);
   }
   const payload = await response.json();
-  const record = payload.record || {};
+  const serverRecord = payload.record || {};
   return {
-    ...record,
+    ...serverRecord,
     libraryPath: `${KC_SERVER_LIBRARY_API}/records/${encodeURIComponent(slot.id)}`,
     libraryManifestPath: KC_SERVER_LIBRARY_API,
-    sharedSavedAt: record.serverSavedAt || record.savedAt || new Date().toISOString()
+    sharedSavedAt: serverRecord.serverSavedAt || serverRecord.savedAt || new Date().toISOString()
   };
 }
 
