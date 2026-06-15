@@ -5,7 +5,7 @@ import nodemailer from 'nodemailer';
 import { PDFParse } from 'pdf-parse';
 import xlsx from 'xlsx';
 import { addDays, format, parseISO } from 'date-fns';
-import { mkdir, readFile, readdir, stat, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -13,6 +13,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
 const dataDir = path.join(rootDir, 'data');
 const uploadDir = path.join(dataDir, 'uploads');
+const kcfxFileDir = path.join(dataDir, 'kcfx-files');
 const dbPath = path.join(dataDir, 'db.json');
 const kcfxDir = path.join(rootDir, 'public', 'kcfx');
 
@@ -67,6 +68,25 @@ const SYSTEM_FILE_PACKAGES = [
     description: '销售及库存看板嵌入页面的静态运行文件'
   }
 ];
+const KC_LIBRARY_SLOT_IDS = new Set([
+  'dim-product',
+  'dim-warehouse',
+  'dim-warehouse-material',
+  'dim-store-name',
+  'dim-customer-material',
+  'dim-purchase-division',
+  'dim-7',
+  'dim-8',
+  'fact-inventory',
+  'fact-2',
+  'fact-3',
+  'fact-4',
+  'fact-5',
+  'fact-6',
+  'fact-7',
+  'fact-8',
+  'sales-data'
+]);
 const PERMISSION_GROUPS = [
   {
     value: 'supplierPayment',
@@ -349,11 +369,13 @@ async function buildSystemPackageFiles(packageId, db, includeData = true) {
     pushJson('system-data/db.redacted.json', redactDb(db));
     pushJson('system-data/invoice-index.json', invoiceIndex(db));
     await pushCollected(uploadDir, 'invoice-uploads');
+    await pushCollected(kcfxFileDir, 'kcfx-uploaded-files');
     await pushCollected(kcfxDir, 'kcfx');
   } else if (packageId === 'invoice-uploads') {
     pushJson('invoice-index.json', invoiceIndex(db));
     await pushCollected(uploadDir, 'invoice-uploads');
   } else if (packageId === 'sales-inventory-files') {
+    await pushCollected(kcfxFileDir, 'kcfx-uploaded-files');
     await pushCollected(kcfxDir, 'kcfx');
   }
   return files;
@@ -459,6 +481,7 @@ function normalizeDb(db) {
 
 async function ensureDb() {
   await mkdir(uploadDir, { recursive: true });
+  await mkdir(kcfxFileDir, { recursive: true });
   try {
     return normalizeDb(JSON.parse(await readFile(dbPath, 'utf8')));
   } catch {
@@ -1499,9 +1522,302 @@ function sanitizeKcfxLibraryRecord(id, record = {}) {
   };
 }
 
+function normalizeKcfxText(value) {
+  if (value === null || value === undefined) return '';
+  const text = String(value).trim();
+  return text.endsWith('.0') ? text.slice(0, -2) : text;
+}
+
+function normalizeKcfxHeaderName(value) {
+  return normalizeKcfxText(value)
+    .replace(/（/g, '(')
+    .replace(/）/g, ')')
+    .replace(/\s+/g, '')
+    .toLowerCase();
+}
+
+function normalizeKcfxHeaderCell(value, index) {
+  const text = normalizeKcfxText(value);
+  return text || `__EMPTY_${index + 1}`;
+}
+
+function normalizeKcfxCellValue(value, rawValue = value) {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'number' && !Number.isFinite(value)) return '';
+  if (typeof value === 'string' && value.startsWith('#')) return '';
+  if (typeof rawValue === 'number' && Number.isFinite(rawValue) && !Number.isInteger(rawValue)) return rawValue;
+  return value;
+}
+
+function kcfxRowFromHeaderValues(headers, values, rawValues = []) {
+  const normalizedValues = values.map((value, index) => normalizeKcfxCellValue(value, rawValues[index]));
+  const row = { __cells: normalizedValues };
+  headers.forEach((header, index) => {
+    row[header] = normalizedValues[index];
+  });
+  return row;
+}
+
+function kcfxHeaderKeywordsForSlot(slot = {}) {
+  const common = ['物料', '编码', '数量', '库存', '仓库', '组织', '结存', '结余'];
+  if (slot.id === 'fact-inventory') {
+    return [...common, '结存数量', '真实成本', '真实成本单价', '货品'];
+  }
+  if (slot.id === 'fact-2') {
+    return [...common, '0430', '结余库存数量', '结算价', '库龄', '销售产品线', '销售系列'];
+  }
+  if (/^fact-[3-8]$/.test(slot.id || '')) {
+    return [...common, '结算价', '含税', '库存数量', '期末', '收发'];
+  }
+  return common;
+}
+
+function scoreKcfxHeaderCandidate(headers, rows, headerIndex, slot = {}) {
+  const normalizedHeaders = headers.map(normalizeKcfxHeaderName);
+  const nonEmptyHeaders = normalizedHeaders.filter((header) => header && !header.startsWith('__empty_'));
+  const headerText = normalizedHeaders.join('|');
+  const keywordScore = kcfxHeaderKeywordsForSlot(slot)
+    .reduce((score, keyword) => score + (headerText.includes(normalizeKcfxHeaderName(keyword)) ? 1 : 0), 0);
+  const configured = Number.isInteger(slot.skipRows) ? slot.skipRows : 0;
+  const configuredBonus = headerIndex === configured ? 6 : 0;
+  const firstRowBonus = headerIndex === 0 ? 2 : 0;
+  const rowsScore = Math.min(rows.length, 20) / 2;
+  const emptyHeaderPenalty = Math.max(0, headers.length - nonEmptyHeaders.length) / 2;
+  const numericHeaderPenalty = nonEmptyHeaders.filter((header) => /^-?\d+(\.\d+)?$/.test(header)).length * 3;
+  return keywordScore * 20 + nonEmptyHeaders.length * 2 + rowsScore + configuredBonus + firstRowBonus - emptyHeaderPenalty - numericHeaderPenalty;
+}
+
+function kcfxHeaderRowCandidates(slot = {}, matrixLength = 0) {
+  const configured = Number.isInteger(slot.skipRows) ? slot.skipRows : 0;
+  const maxIndex = Math.max(0, Math.min(matrixLength - 1, 9));
+  const candidates = [configured, 0, 3];
+  for (let index = 0; index <= maxIndex; index += 1) candidates.push(index);
+  return [...new Set(candidates)]
+    .filter((index) => Number.isInteger(index) && index >= 0 && index < Math.max(matrixLength, 1));
+}
+
+function parseKcfxRowsFromHeaderIndex(matrix, headerIndex, slot = {}) {
+  const headerValues = matrix[headerIndex] || [];
+  const headers = headerValues.map((value, index) => normalizeKcfxHeaderCell(value, index));
+  const rows = matrix.slice(headerIndex + 1)
+    .filter((values) => Array.isArray(values) && values.some((value) => normalizeKcfxText(value) !== ''))
+    .map((values) => kcfxRowFromHeaderValues(headers, values));
+  return {
+    headerRowIndex: headerIndex,
+    headerRowNumber: headerIndex + 1,
+    parseNote: `${headerIndex + 1} 行作为表头`,
+    headers,
+    rows,
+    score: scoreKcfxHeaderCandidate(headers, rows, headerIndex, slot)
+  };
+}
+
+function chooseKcfxHeaderCandidate(candidates) {
+  if (!candidates.length) {
+    return {
+      headerRowIndex: 0,
+      headerRowNumber: 1,
+      parseNote: '未找到可解析表头',
+      headers: [],
+      rows: [],
+      score: 0
+    };
+  }
+  return [...candidates].sort((a, b) => b.score - a.score || a.headerRowIndex - b.headerRowIndex)[0];
+}
+
+function pickKcfxSheetName(workbook, slot = {}) {
+  const sheetNames = workbook.SheetNames || [];
+  const hint = normalizeKcfxHeaderName(slot.sheetHint || '');
+  if (hint) {
+    const matched = sheetNames.find((name) => normalizeKcfxHeaderName(name) === hint)
+      || sheetNames.find((name) => normalizeKcfxHeaderName(name).includes(hint) || hint.includes(normalizeKcfxHeaderName(name)));
+    if (matched) return matched;
+  }
+  return sheetNames[0];
+}
+
+function parseKcfxWorkbookRows(workbook, slot) {
+  const sheetName = pickKcfxSheetName(workbook, slot);
+  const sheet = workbook.Sheets[sheetName];
+  if (!sheet) throw new Error('missing sheet');
+  const matrix = xlsx.utils.sheet_to_json(sheet, {
+    header: 1,
+    defval: '',
+    raw: false,
+    blankrows: true,
+    range: 0
+  });
+  const candidates = kcfxHeaderRowCandidates(slot, matrix.length)
+    .map((rowIndex) => parseKcfxRowsFromHeaderIndex(matrix, rowIndex, slot))
+    .filter(Boolean);
+  const selected = chooseKcfxHeaderCandidate(candidates);
+  return {
+    sheetName,
+    headerRowNumber: selected.headerRowNumber,
+    parseNote: selected.parseNote,
+    attemptedHeaderRows: candidates.map((candidate) => ({
+      headerRowNumber: candidate.headerRowNumber,
+      rowCount: candidate.rows.length,
+      score: candidate.score,
+      headerFirst6: candidate.headers.slice(0, 6)
+    })),
+    headers: selected.headers,
+    rows: selected.rows
+  };
+}
+
+function kcfxNthValue(row, oneBasedIndex) {
+  const index = oneBasedIndex - 1;
+  if (Array.isArray(row?.__cells)) return row.__cells[index] ?? '';
+  return Object.entries(row || {})
+    .filter(([key]) => key !== '__cells')
+    .map(([, value]) => value)[index] ?? '';
+}
+
+function buildKcfxParseDiagnostics(parsed) {
+  const rows = parsed.rows || [];
+  const headers = parsed.headers || Object.keys(rows[0] || {});
+  return {
+    sheetName: parsed.sheetName || '',
+    headerRowNumber: parsed.headerRowNumber || 1,
+    parseNote: parsed.parseNote || '',
+    attemptedHeaderRows: parsed.attemptedHeaderRows || [],
+    headerFirst12: headers.slice(0, 12),
+    gHeader: headers[6] || '',
+    hHeader: headers[7] || '',
+    adHeader: headers[29] || '',
+    gSamples: rows.slice(0, 3).map((row) => kcfxNthValue(row, 7)),
+    hSamples: rows.slice(0, 3).map((row) => kcfxNthValue(row, 8)),
+    adSamples: rows.slice(0, 3).map((row) => kcfxNthValue(row, 30))
+  };
+}
+
+function parseKcfxSlotPayload(slotId, payload) {
+  let slot = {};
+  try {
+    slot = payload ? JSON.parse(payload) : {};
+  } catch {
+    slot = {};
+  }
+  return {
+    id: slotId,
+    type: String(slot.type || ''),
+    title: String(slot.title || slotId),
+    expectedName: String(slot.expectedName || ''),
+    sheetHint: String(slot.sheetHint || ''),
+    skipRows: Number.isInteger(Number(slot.skipRows)) ? Number(slot.skipRows) : undefined
+  };
+}
+
+function buildKcfxFileRecord(file, storedFile, slot, parsed) {
+  return {
+    id: slot.id,
+    type: slot.type,
+    title: slot.title,
+    expectedName: slot.expectedName,
+    fileName: file.originalname,
+    size: file.size,
+    lastModified: Date.now(),
+    savedAt: new Date().toISOString(),
+    appliedAt: new Date().toISOString(),
+    sheetName: parsed.sheetName,
+    serverFileName: storedFile.fileName,
+    serverFilePath: storedFile.relativePath,
+    parseDiagnostics: {
+      ...buildKcfxParseDiagnostics(parsed),
+      readMode: 'server',
+      fallbackAttempts: []
+    },
+    rows: parsed.rows
+  };
+}
+
+async function saveKcfxOriginalFile(slotId, file) {
+  const slotDir = path.join(kcfxFileDir, slotId);
+  await mkdir(slotDir, { recursive: true });
+  const ext = path.extname(file.originalname || '').slice(0, 16);
+  const fileName = `${slotId}-${Date.now()}-${crypto.randomUUID()}${ext}`;
+  const fullPath = path.join(slotDir, fileName);
+  await rename(file.path, fullPath);
+  return {
+    fullPath,
+    fileName,
+    relativePath: safeArchiveName(path.join(slotId, fileName))
+  };
+}
+
+async function removeKcfxStoredFile(record) {
+  if (!record?.serverFileName || !record?.id) return;
+  try {
+    await unlink(path.join(kcfxFileDir, path.basename(record.id), path.basename(record.serverFileName)));
+  } catch {
+    // Keep current request successful if an old file has already been removed.
+  }
+}
+
+function parseKcfxWorkbookFile(filePath, slot) {
+  const workbook = xlsx.readFile(filePath, {
+    cellDates: true,
+    dense: true,
+    cellHTML: false,
+    cellNF: false,
+    cellStyles: false
+  });
+  return parseKcfxWorkbookRows(workbook, slot);
+}
+
 app.get('/api/kcfx-library', async (req, res) => {
   const db = await ensureDb();
   res.json(publicKcfxLibrary(db));
+});
+
+app.post('/api/kcfx-library/records/:id/upload', upload.single('file'), async (req, res) => {
+  const db = await ensureDb();
+  const requestUser = requireSystemOwner(db, req, res);
+  if (!requestUser) {
+    if (req.file) await removeUploadedFile(req.file.filename);
+    return;
+  }
+  const id = String(req.params.id || '').trim();
+  if (!KC_LIBRARY_SLOT_IDS.has(id)) {
+    if (req.file) await removeUploadedFile(req.file.filename);
+    return res.status(400).json({ error: 'invalid slot' });
+  }
+  if (!req.file) return res.status(400).json({ error: 'missing file' });
+  if (!/\.(xlsx|xlsm|xls|csv)$/i.test(req.file.originalname || '')) {
+    await removeUploadedFile(req.file.filename);
+    return res.status(400).json({ error: 'unsupported file type' });
+  }
+
+  const previousRecord = db.kcfxLibrary.records[id];
+  let storedFile = null;
+  try {
+    const slot = parseKcfxSlotPayload(id, req.body.slot);
+    storedFile = await saveKcfxOriginalFile(id, req.file);
+    const parsed = parseKcfxWorkbookFile(storedFile.fullPath, slot);
+    if (!parsed.rows.length) throw new Error('文件未解析到有效行');
+    const record = buildKcfxFileRecord(req.file, storedFile, slot, parsed);
+    db.kcfxLibrary.records[id] = {
+      ...record,
+      serverSavedAt: new Date().toISOString(),
+      serverSavedBy: requestUser.name
+    };
+    db.kcfxLibrary.savedAt = new Date().toISOString();
+    await removeKcfxStoredFile(previousRecord);
+    pushLog(db, '文件库上传', requestUser.name, `${requestUser.name} 上传并解析销售及库存看板文件库：${record.title || id}`);
+    await saveDb(db);
+    res.json({ ok: true, library: publicKcfxLibrary(db), record: db.kcfxLibrary.records[id] });
+  } catch (error) {
+    if (storedFile?.fullPath) {
+      try {
+        await unlink(storedFile.fullPath);
+      } catch {}
+    } else if (req.file) {
+      await removeUploadedFile(req.file.filename);
+    }
+    res.status(400).json({ error: error?.message || 'parse failed' });
+  }
 });
 
 app.put('/api/kcfx-library/records/:id', async (req, res) => {
@@ -1528,6 +1844,7 @@ app.delete('/api/kcfx-library/records/:id', async (req, res) => {
   if (!requestUser) return;
   const id = String(req.params.id || '').trim();
   if (!id) return res.status(400).json({ error: 'missing id' });
+  await removeKcfxStoredFile(db.kcfxLibrary.records[id]);
   delete db.kcfxLibrary.records[id];
   db.kcfxLibrary.savedAt = new Date().toISOString();
   pushLog(db, '文件库删除', requestUser.name, `${requestUser.name} 删除销售及库存看板文件库：${id}`);

@@ -1,4 +1,5 @@
 const $ = (selector) => document.querySelector(selector);
+const selectedServerFiles = new Map();
 
 document.addEventListener("DOMContentLoaded", async () => {
   await loadSharedLibrary({ statusEl: $("#sharedStatus") });
@@ -39,28 +40,24 @@ async function uploadAllToServer() {
     return;
   }
   const button = $("#uploadAllServerBtn");
-  const records = Object.fromEntries((await getAllRecords()).map((record) => [record.id, record]));
-  const uploadableRecords = pageSlots()
-    .map((slot) => getDisplayRecord(records[slot.id]))
-    .filter((record) => record && !isDeletedRecord(record) && Array.isArray(record.rows) && record.rows.length);
+  const uploadableSlots = pageSlots()
+    .map((slot) => ({ slot, file: selectedServerFiles.get(slot.id) }))
+    .filter((item) => item.file);
 
-  if (!uploadableRecords.length) {
-    setLibraryStatus("当前页面没有可上传到腾讯云服务器的文件。");
+  if (!uploadableSlots.length) {
+    setLibraryStatus("当前页面没有可上传的原始 Excel 文件，请重新选择或拖拽文件。");
     return;
   }
 
   if (button) button.disabled = true;
-  setLibraryStatus(`正在上传 ${uploadableRecords.length} 个文件到腾讯云服务器...`);
+  setLibraryStatus(`正在上传 ${uploadableSlots.length} 个文件到腾讯云服务器...`);
   let uploaded = 0;
   try {
-    for (const record of uploadableRecords) {
-      const serverRecord = await saveKcfxServerRecord({
-        ...record,
-        appliedAt: record.appliedAt || new Date().toISOString()
-      });
+    for (const { slot, file } of uploadableSlots) {
+      const serverRecord = await uploadKcfxServerFile(slot, file);
       await saveRecord(serverRecord);
       uploaded += 1;
-      setLibraryStatus(`正在上传到腾讯云服务器：${uploaded}/${uploadableRecords.length}`);
+      setLibraryStatus(`正在上传到腾讯云服务器：${uploaded}/${uploadableSlots.length}`);
     }
     await loadSharedLibrary({ statusEl: $("#sharedStatus"), force: true });
     await renderLibrary();
@@ -337,12 +334,11 @@ async function saveSlot(slotId) {
   }
 
   try {
-    status.textContent = "正在解析文件...";
-    const record = await readExcelFile(file, slot);
-    if (!record.rows.length) throw new Error("文件未解析到有效行。");
-    const nextRecord = await saveKcfxServerRecord({ ...record, appliedAt: new Date().toISOString() });
+    selectedServerFiles.set(slotId, file);
+    status.textContent = "正在上传原始文件到腾讯云服务器并解析...";
+    const nextRecord = await uploadKcfxServerFile(slot, file);
     await saveRecord(nextRecord);
-    status.textContent = "已保存并强制应用最新上传文件，刷新后看板也会读取这份文件。";
+    status.textContent = "已上传到腾讯云服务器并解析保存，其他人刷新后会读取这份文件。";
     await renderLibrary();
   } catch (error) {
     status.textContent = formatUploadError(error);
@@ -368,12 +364,11 @@ async function saveSlotFile(slotId, file) {
   }
 
   try {
-    status.textContent = "正在解析文件...";
-    const record = await readExcelFile(file, slot);
-    if (!record.rows.length) throw new Error("文件未解析到有效行。");
-    const nextRecord = await saveKcfxServerRecord({ ...record, appliedAt: new Date().toISOString() });
+    selectedServerFiles.set(slotId, file);
+    status.textContent = "正在上传原始文件到腾讯云服务器并解析...";
+    const nextRecord = await uploadKcfxServerFile(slot, file);
     await saveRecord(nextRecord);
-    status.textContent = "已保存并强制应用最新上传文件，刷新后看板也会读取这份文件。";
+    status.textContent = "已上传到腾讯云服务器并解析保存，其他人刷新后会读取这份文件。";
     await renderLibrary();
   } catch (error) {
     status.textContent = formatUploadError(error);
@@ -405,8 +400,7 @@ async function applySlot(slotId) {
   if (!record) return;
   const nextRecord = promotePendingRecord(record);
   if (!nextRecord) return;
-  const serverRecord = await saveKcfxServerRecord(nextRecord);
-  await saveRecord(serverRecord);
+  await saveRecord(nextRecord);
   await renderLibrary();
   const status = $(`#status-${slotId}`);
   if (status) status.textContent = "应用成功，当前页面和看板会读取这份文件。";
