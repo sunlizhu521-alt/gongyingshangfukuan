@@ -393,8 +393,9 @@ async function deleteKcfxServerRecord(id) {
 
 function shouldImportSharedRecord(shared, local) {
   if (!local) return true;
-  if (isDeletedRecord(local) || hasPendingRecord(local)) return false;
   if (isKcfxServerRecord(shared) && isCompleteKcfxRecord(shared)) return true;
+  if (hasPendingRecord(local)) return false;
+  if (isDeletedRecord(local)) return isKcfxServerRecord(shared);
   if (isLocalBrowserRecord(local)) return false;
   if (recordIsNewer(shared, local)) return true;
   return sharedIsNotOlder(shared, local) && libraryRecordDiffers(shared, local);

@@ -1,5 +1,6 @@
 const $ = (selector) => document.querySelector(selector);
 const selectedServerFiles = new Map();
+const slotStatusMessages = new Map();
 
 document.addEventListener("DOMContentLoaded", () => {
   applyEmbeddedHostClass();
@@ -120,6 +121,25 @@ function setLibraryLoadProgress(percent, message, options = {}) {
   $("#libraryLoadProgressBar").style.width = `${value}%`;
 }
 
+function setSlotStatus(slotId, message, options = {}) {
+  if (!slotId) return;
+  if (options.remember === false) {
+    // Keep the existing cached message when this is only replaying after a re-render.
+  } else if (message) {
+    slotStatusMessages.set(slotId, message);
+  } else {
+    slotStatusMessages.delete(slotId);
+  }
+  const status = $(`#status-${slotId}`);
+  if (status) status.textContent = message || "";
+}
+
+function applySlotStatusMessages() {
+  slotStatusMessages.forEach((message, slotId) => {
+    setSlotStatus(slotId, message, { remember: false });
+  });
+}
+
 function setSingleUploadProgress(status, percent, message) {
   const numericPercent = Number(percent);
   const hasPercent = Number.isFinite(numericPercent);
@@ -161,10 +181,14 @@ async function uploadAllToServer() {
   let queued = 0;
   try {
     for (const { slot, file } of uploadableSlots) {
-      setLibraryStatus(`正在本地浏览器解析文件：${uploaded + 1}/${uploadableSlots.length}`);
+      const parsingMessage = `正在本地浏览器解析文件：${uploaded + 1}/${uploadableSlots.length}`;
+      setLibraryStatus(parsingMessage);
+      setSlotStatus(slot.id, parsingMessage);
       setBatchUploadProgress(uploaded, uploadableSlots.length, 5);
       const parsedRecord = await readExcelFile(file, slot);
-      setLibraryStatus(`本地解析完成，正在上传到腾讯云服务器：${uploaded + 1}/${uploadableSlots.length}`);
+      const uploadMessage = `本地解析完成，正在上传到腾讯云服务器：${uploaded + 1}/${uploadableSlots.length}`;
+      setLibraryStatus(uploadMessage);
+      setSlotStatus(slot.id, uploadMessage);
       setBatchUploadProgress(uploaded, uploadableSlots.length, 15);
       const serverRecord = await uploadKcfxServerFile(slot, file, parsedRecord, {
         onProgress: ({ percent }) => setBatchUploadProgress(uploaded, uploadableSlots.length, percent)
@@ -174,10 +198,12 @@ async function uploadAllToServer() {
       if (serverRecord?.parseStatus && serverRecord.parseStatus !== "ready") queued += 1;
       uploaded += 1;
       setLibraryStatus(`已完成：${uploaded}/${uploadableSlots.length} 个文件已保存到腾讯云服务器。`);
+      setSlotStatus(slot.id, "已完成：已保存到腾讯云服务器。");
     }
     await loadSharedLibrary({ statusEl: $("#sharedStatus"), force: true });
     await renderLibrary();
     if (queued) {
+      uploadSlotIds.forEach((slotId) => setSlotStatus(slotId, "已完成：已保存到腾讯云服务器，后台解析中。"));
       scheduleServerParseRefresh(uploadSlotIds);
       setLibraryStatus(`已保存 ${uploaded} 个原始文件到腾讯云服务器，后台解析中。`);
       return;
@@ -220,17 +246,24 @@ function scheduleServerParseRefresh(ids = null) {
     const records = result?.manifest?.records || {};
     if (serverParseRefreshCount < 8 && shouldWaitForServerParse(records, ids)) {
       setLibraryStatus("腾讯云服务器正在解析文件，请稍后...");
+      refreshRecordsForIds(records, ids).forEach((record) => {
+        if (["queued", "parsing"].includes(record?.parseStatus)) {
+          setSlotStatus(record.id, "已完成：已保存到腾讯云服务器，后台解析中。");
+        }
+      });
       scheduleServerParseRefresh(ids);
     } else {
       const { failed, ready } = summarizeServerParse(records, ids);
       serverParseRefreshCount = 0;
       if (failed.length) {
         const names = failed.map((record) => record.title || record.id).join("、");
+        failed.forEach((record) => setSlotStatus(record.id, "服务器解析失败，请查看错误信息后重新上传。"));
         setLibraryStatus(`服务器解析失败：${names}。请查看槽位错误信息后重新上传。`);
         setLibraryLoadProgress(100, "服务器解析失败，请查看槽位错误信息。");
         return;
       }
       if (ready.length) {
+        ready.forEach((record) => setSlotStatus(record.id, "服务器解析完成，文件已保存并可用于看板。"));
         setLibraryStatus(`服务器解析完成：${ready.length} 个文件已保存并可用于看板。`);
         setLibraryLoadProgress(100, "服务器解析完成，文件已可用于看板。");
         window.setTimeout(() => setLibraryLoadProgress(0, "", { hidden: true }), 1200);
@@ -342,6 +375,7 @@ function renderLibraryFromRecords(records) {
   $("#libraryGrid").innerHTML = slots.map((slot) => renderCard(slot, isDeletedRecord(records[slot.id]) ? null : records[slot.id], labels)).join("");
   bindCardEvents();
   applyCardPermissions();
+  applySlotStatusMessages();
 }
 
 function latestSavedAt(slots, records) {
@@ -526,7 +560,7 @@ function chooseSlotFile(slotId) {
   const status = $(`#status-${slotId}`);
   if (!input) return;
   input.value = "";
-  status.textContent = "请选择要上传的 Excel 文件。";
+  setSlotStatus(slotId, "请选择要上传的 Excel 文件。");
   input.click();
 }
 
@@ -541,33 +575,36 @@ async function saveSlot(slotId) {
   const status = $(`#status-${slotId}`);
   const file = input.files?.[0];
   if (!file) {
-    status.textContent = "请先选择文件。";
+    setSlotStatus(slotId, "请先选择文件。");
     return;
   }
 
   try {
     selectedServerFiles.set(slotId, file);
-    status.textContent = "正在本地浏览器解析文件...";
+    setSlotStatus(slotId, "正在本地浏览器解析文件...");
     setSingleUploadProgress(status, 5, "正在本地浏览器解析文件...");
     const parsedRecord = await readExcelFile(file, slot);
-    status.textContent = "本地解析完成，正在上传原始文件和解析结果到腾讯云服务器...";
+    setSlotStatus(slotId, "本地解析完成，正在上传原始文件和解析结果到腾讯云服务器...");
     setSingleUploadProgress(status, 15, "本地解析完成，正在上传原始文件和解析结果到腾讯云服务器...");
     const nextRecord = await uploadKcfxServerFile(slot, file, parsedRecord, {
       onProgress: ({ percent }) => setSingleUploadProgress(status, percent, "正在上传原始文件和解析结果到腾讯云服务器...")
     });
     await saveRecord(nextRecord);
     setLibraryLoadProgress(100, "已完成：已保存到腾讯云服务器。");
+    setSlotStatus(slotId, "已完成：已保存到腾讯云服务器。");
     if (nextRecord?.parseStatus && nextRecord.parseStatus !== "ready") {
-      status.textContent = "已保存到腾讯云服务器，后台解析中。";
+      setSlotStatus(slotId, "已完成：已保存到腾讯云服务器，后台解析中。");
       scheduleServerParseRefresh([slotId]);
       await renderLibrary();
+      setSlotStatus(slotId, "已完成：已保存到腾讯云服务器，后台解析中。");
       return;
     }
     await loadSharedLibrary({ statusEl: $("#sharedStatus"), force: true, ids: [slotId] }).catch(() => null);
-    status.textContent = "已上传到腾讯云服务器并解析保存，其他人刷新后会读取这份文件。";
+    setSlotStatus(slotId, "已上传到腾讯云服务器并解析保存，其他人刷新后会读取这份文件。");
     await renderLibrary();
+    setSlotStatus(slotId, "已上传到腾讯云服务器并解析保存，其他人刷新后会读取这份文件。");
   } catch (error) {
-    status.textContent = formatUploadError(error);
+    setSlotStatus(slotId, formatUploadError(error));
   }
 }
 
@@ -581,37 +618,40 @@ async function saveSlotFile(slotId, file) {
   const status = $(`#status-${slotId}`);
   if (!slot || !status) return;
   if (!file) {
-    status.textContent = "请先选择或拖拽文件。";
+    setSlotStatus(slotId, "请先选择或拖拽文件。");
     return;
   }
   if (!isAcceptedLibraryFile(file)) {
-    status.textContent = "请上传 Excel 或 CSV 文件（.xlsx/.xlsm/.xls/.csv）。";
+    setSlotStatus(slotId, "请上传 Excel 或 CSV 文件（.xlsx/.xlsm/.xls/.csv）。");
     return;
   }
 
   try {
     selectedServerFiles.set(slotId, file);
-    status.textContent = "正在本地浏览器解析文件...";
+    setSlotStatus(slotId, "正在本地浏览器解析文件...");
     setSingleUploadProgress(status, 5, "正在本地浏览器解析文件...");
     const parsedRecord = await readExcelFile(file, slot);
-    status.textContent = "本地解析完成，正在上传原始文件和解析结果到腾讯云服务器...";
+    setSlotStatus(slotId, "本地解析完成，正在上传原始文件和解析结果到腾讯云服务器...");
     setSingleUploadProgress(status, 15, "本地解析完成，正在上传原始文件和解析结果到腾讯云服务器...");
     const nextRecord = await uploadKcfxServerFile(slot, file, parsedRecord, {
       onProgress: ({ percent }) => setSingleUploadProgress(status, percent, "正在上传原始文件和解析结果到腾讯云服务器...")
     });
     await saveRecord(nextRecord);
     setLibraryLoadProgress(100, "已完成：已保存到腾讯云服务器。");
+    setSlotStatus(slotId, "已完成：已保存到腾讯云服务器。");
     if (nextRecord?.parseStatus && nextRecord.parseStatus !== "ready") {
-      status.textContent = "已保存到腾讯云服务器，后台解析中。";
+      setSlotStatus(slotId, "已完成：已保存到腾讯云服务器，后台解析中。");
       scheduleServerParseRefresh([slotId]);
       await renderLibrary();
+      setSlotStatus(slotId, "已完成：已保存到腾讯云服务器，后台解析中。");
       return;
     }
     await loadSharedLibrary({ statusEl: $("#sharedStatus"), force: true, ids: [slotId] }).catch(() => null);
-    status.textContent = "已上传到腾讯云服务器并解析保存，其他人刷新后会读取这份文件。";
+    setSlotStatus(slotId, "已上传到腾讯云服务器并解析保存，其他人刷新后会读取这份文件。");
     await renderLibrary();
+    setSlotStatus(slotId, "已上传到腾讯云服务器并解析保存，其他人刷新后会读取这份文件。");
   } catch (error) {
-    status.textContent = formatUploadError(error);
+    setSlotStatus(slotId, formatUploadError(error));
   }
 }
 
