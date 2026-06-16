@@ -135,7 +135,6 @@ const KC_LIBRARY_SLOT_IDS = new Set([
 ]);
 const KC_PRIORITY_PRELOAD_SLOT_IDS = new Set([
   'sales-data',
-  'fact-inventory',
   'fact-2',
   'dim-product',
   'dim-warehouse',

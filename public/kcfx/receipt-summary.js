@@ -3,6 +3,10 @@ const bindIfExists = (selector, eventName, handler) => {
   const el = $(selector);
   if (el) el.addEventListener(eventName, handler);
 };
+const setText = (selector, value) => {
+  const el = $(selector);
+  if (el) el.textContent = value;
+};
 const DEPARTMENT_ORDER = [
   "海外事业一部",
   "海外事业二部",
@@ -43,6 +47,9 @@ const LINKED_PRODUCT_FILTERS = [
   { id: "seriesFilter", key: "series", allLabel: "全部销售系列" },
   { id: "warehouseLocationFilter", key: "warehouseLocation", allLabel: "全部仓库位置" }
 ];
+const RECEIPT_SUMMARY_REQUIRED_RECORD_IDS = ["fact-2", "dim-product", "dim-warehouse", "dim-warehouse-material"];
+const RECEIPT_SUMMARY_DEFERRED_RECORD_IDS = ["fact-inventory"];
+const SUMMARY_BUILD_CHUNK_SIZE = 800;
 let summaryRows = [];
 let filteredRows = [];
 let detailTableRows = [];
@@ -51,6 +58,7 @@ const detailTableFilters = {};
 let departmentMatchDiagnostics = { matched: 0, unmatched: 0, sample: "" };
 let closedInventoryValue = 0;
 let summarySearchTimer = 0;
+let closedInventoryLoadPromise = null;
 
 document.addEventListener("DOMContentLoaded", async () => {
   bindIfExists("#refreshBtn", "click", clearFilters);
@@ -78,7 +86,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   try {
     await loadSharedLibrary({
       statusEl: $("#summaryStatus"),
-      ids: ["fact-inventory", "fact-2", "dim-product", "dim-warehouse", "dim-warehouse-material"],
+      ids: RECEIPT_SUMMARY_REQUIRED_RECORD_IDS,
       onProgress: ({ percent, message }) => {
         const value = Number.isFinite(Number(percent)) ? ` ${Math.round(Number(percent))}%` : "";
         $("#summaryStatus").textContent = `${message || "正在读取完整数据"}${value}`;
@@ -112,60 +120,92 @@ async function refreshSummary() {
   const productMap = mapProductsByMaterialCode(productRecord?.rows || []);
   const warehouseMaterialMaps = mapWarehouseMaterialDimensions(warehouseMaterialRecord?.rows || []);
   departmentMatchDiagnostics = { matched: 0, unmatched: 0, sample: "" };
-  summaryRows = (detailRecord.rows || []).map((row) => {
-    const materialCode = getDetailMaterialCode(row);
-    const warehouse = getDetailWarehouse(row);
-    const organization = getDetailOrganization(row);
-    const materialName = getDetailMaterialName(row);
-    const endingQty = getDetailEndingQty(row);
-    const inventoryDays = getDetailInventoryDays(row);
-    const pmcType = getPmcInventoryType(row);
-    const pmcBasis = getPmcBasis(row);
-    const pmcReason = getPmcReason(row);
-    const product = productMap.get(materialCode) || {};
-    const settlementPrice = getDetailSettlementPrice(row, product);
-    const ageQuantities = getAgeQuantities(row);
-    const ageSettlementAmounts = Object.fromEntries(
-      Object.entries(ageQuantities).map(([label, qty]) => [label, qty * settlementPrice])
-    );
-    const warehouseInfo = warehouseMap.get(warehouse) || {};
-    const department = lookupDepartment(warehouseMaterialMaps, row) || getDetailDepartment(row);
-    recordDepartmentMatch(department, row);
-    const productCategory = product.productCategory || "";
-    const warehouseType = warehouseInfo.warehouseType || "";
-    const saleStatus = classifySaleStatus(warehouseType, productCategory);
-    return {
-      materialCode,
-      sku: product.sku || "",
-      materialName,
-      department,
-      productCategory,
-      productLine: product.productLine || "",
-      series: product.series || "",
-      warehouseType,
-      saleStatus,
-      warehouseLocation: warehouseInfo.warehouseLocation || "",
-      warehouse,
-      organization,
-      inventoryDays,
-      pmcType,
-      pmcBasis,
-      pmcReason,
-      ageQuantities,
-      ageSettlementAmounts,
-      ageQuantityTotal: sumObjectValues(ageQuantities),
-      ageSettlementAmount: sumObjectValues(ageSettlementAmounts),
-      endingQty,
-      settlementPrice,
-      settlementAmount: endingQty * settlementPrice
-    };
+  summaryRows = await buildSummaryRowsInChunks(detailRecord.rows || [], {
+    productMap,
+    warehouseMap,
+    warehouseMaterialMaps,
+    onProgress: (done, total) => {
+      if (!total) return;
+      const percent = 90 + Math.round((done / total) * 8);
+      $("#summaryStatus").textContent = `正在生成供应链库存分析 ${done}/${total} ${percent}%`;
+    }
   });
   populateFilters(summaryRows, records);
   renderSourcePanel(detailRecord, summaryRows);
   const diagnostic = departmentMatchDiagnostics.sample ? `，未匹配样例 ${departmentMatchDiagnostics.sample}` : "";
   $("#summaryStatus").textContent = buildSummaryStatus(summaryRows.length, departmentMatchDiagnostics.matched, diagnostic, records);
   renderSummary();
+  scheduleClosedInventoryLoad();
   scheduleDeferredTrendLoad();
+}
+
+async function buildSummaryRowsInChunks(rows, context) {
+  const result = [];
+  for (let start = 0; start < rows.length; start += SUMMARY_BUILD_CHUNK_SIZE) {
+    const chunk = rows.slice(start, start + SUMMARY_BUILD_CHUNK_SIZE);
+    for (const row of chunk) {
+      result.push(buildSummaryRow(row, context));
+    }
+    context.onProgress?.(Math.min(start + chunk.length, rows.length), rows.length);
+    if (start + SUMMARY_BUILD_CHUNK_SIZE < rows.length) await nextFrame();
+  }
+  return result;
+}
+
+function buildSummaryRow(row, { productMap, warehouseMap, warehouseMaterialMaps }) {
+  const materialCode = getDetailMaterialCode(row);
+  const warehouse = getDetailWarehouse(row);
+  const organization = getDetailOrganization(row);
+  const materialName = getDetailMaterialName(row);
+  const endingQty = getDetailEndingQty(row);
+  const inventoryDays = getDetailInventoryDays(row);
+  const pmcType = getPmcInventoryType(row);
+  const pmcBasis = getPmcBasis(row);
+  const pmcReason = getPmcReason(row);
+  const product = productMap.get(materialCode) || {};
+  const settlementPrice = getDetailSettlementPrice(row, product);
+  const ageQuantities = getAgeQuantities(row);
+  const ageSettlementAmounts = Object.fromEntries(
+    Object.entries(ageQuantities).map(([label, qty]) => [label, qty * settlementPrice])
+  );
+  const warehouseInfo = warehouseMap.get(warehouse) || {};
+  const department = lookupDepartment(warehouseMaterialMaps, row) || getDetailDepartment(row);
+  recordDepartmentMatch(department, row);
+  const productCategory = product.productCategory || "";
+  const warehouseType = warehouseInfo.warehouseType || "";
+  const saleStatus = classifySaleStatus(warehouseType, productCategory);
+  return {
+    materialCode,
+    sku: product.sku || "",
+    materialName,
+    department,
+    productCategory,
+    productLine: product.productLine || "",
+    series: product.series || "",
+    warehouseType,
+    saleStatus,
+    warehouseLocation: warehouseInfo.warehouseLocation || "",
+    warehouse,
+    organization,
+    inventoryDays,
+    pmcType,
+    pmcBasis,
+    pmcReason,
+    ageQuantities,
+    ageSettlementAmounts,
+    ageQuantityTotal: sumObjectValues(ageQuantities),
+    ageSettlementAmount: sumObjectValues(ageSettlementAmounts),
+    endingQty,
+    settlementPrice,
+    settlementAmount: endingQty * settlementPrice
+  };
+}
+
+function nextFrame() {
+  return new Promise((resolve) => {
+    if ("requestAnimationFrame" in window) window.requestAnimationFrame(() => resolve());
+    else window.setTimeout(resolve, 0);
+  });
 }
 
 function clearFilters() {
@@ -186,6 +226,47 @@ function renderClosedInventoryMetrics(record) {
   closedInventoryValue = value;
   $("#closedInventoryQtyTotal").textContent = formatNumberWithYi(qty, 2);
   $("#closedInventoryValueTotal").textContent = formatMoneyWithYi(value);
+  updateValueGapMetric();
+}
+
+function scheduleClosedInventoryLoad() {
+  if (closedInventoryLoadPromise) return closedInventoryLoadPromise;
+  closedInventoryLoadPromise = loadClosedInventoryMetrics().finally(() => {
+    closedInventoryLoadPromise = null;
+  });
+  return closedInventoryLoadPromise;
+}
+
+async function loadClosedInventoryMetrics() {
+  const localRecord = await getRecord("fact-inventory").catch(() => null);
+  const currentRecord = getDisplayRecord(localRecord);
+  const hasLocalRows = Array.isArray(currentRecord?.rows) && currentRecord.rows.length;
+  if (hasLocalRows) {
+    renderClosedInventoryMetrics(currentRecord);
+  } else {
+    setText("#closedInventoryQtyTotal", "同步中");
+    setText("#closedInventoryValueTotal", "同步中");
+  }
+
+  try {
+    await loadSharedLibrary({
+      ids: RECEIPT_SUMMARY_DEFERRED_RECORD_IDS,
+      force: true,
+      onProgress: ({ percent }) => {
+        if (hasLocalRows) return;
+        const value = Number.isFinite(Number(percent)) ? `${Math.round(Number(percent))}%` : "";
+        setText("#closedInventoryQtyTotal", value || "同步中");
+        setText("#closedInventoryValueTotal", "同步中");
+      }
+    });
+    const nextRecord = getDisplayRecord(await getRecord("fact-inventory"));
+    renderClosedInventoryMetrics(nextRecord);
+  } catch (error) {
+    console.warn("closed inventory load failed", error);
+    if (hasLocalRows) return;
+    setText("#closedInventoryQtyTotal", "未同步");
+    setText("#closedInventoryValueTotal", "未同步");
+  }
 }
 
 function buildSummaryStatus(rowCount, matchedCount, diagnostic, records) {
@@ -330,7 +411,7 @@ function renderSummary() {
   const visibleAmount = sumVisibleAmount(filteredRows, selectedAgeLabels);
   $("#qtyTotal").textContent = formatSupplyChainQtyWithYi(sumVisibleQuantity(filteredRows, selectedAgeLabels));
   $("#amountTotal").textContent = formatMoneyWithYi(visibleAmount);
-  $("#valueGapTotal").textContent = formatMoneyWithYi(visibleAmount - closedInventoryValue);
+  updateValueGapMetric(visibleAmount);
   renderSummaryTables(filteredRows, selectedAgeLabels);
   renderAmountCharts(filteredRows, selectedAgeLabels);
   renderQuantityCharts(filteredRows, selectedAgeLabels);
@@ -351,6 +432,13 @@ function renderSummary() {
       <td class="num">${formatMoney(row.settlementAmount)}</td>
     </tr>
   `).join("") : `<tr><td colspan="7" class="empty">暂无数据</td></tr>`;
+}
+
+function updateValueGapMetric(visibleAmount = null) {
+  const amount = Number.isFinite(Number(visibleAmount))
+    ? Number(visibleAmount)
+    : sumVisibleAmount(filteredRows, getSummaryFilterSelections().selectedAgeLabels);
+  $("#valueGapTotal").textContent = formatMoneyWithYi(amount - closedInventoryValue);
 }
 
 function renderDetailTableHeaderFilters(rows) {

@@ -342,11 +342,11 @@ function App() {
   }
 
   function embeddedKcfxSrc(page) {
-    return `/kcfx/${page.sourceFile}?embed=1&v=20260616k`;
+    return `/kcfx/${page.sourceFile}?embed=1&v=20260616l`;
   }
 
   function preloadKcfxSrc() {
-    return `/kcfx/preload.html?preload=1&v=20260616q`;
+    return `/kcfx/preload.html?preload=1&v=20260616r`;
   }
 
   function assertApiResponse(label, response) {
@@ -434,7 +434,6 @@ function App() {
     if (!user || accessibleEmbeddedKcfxPages.length === 0) return;
     const ids = [
       'sales-data',
-      'fact-inventory',
       'fact-2',
       'dim-product',
       'dim-warehouse',
