@@ -76,7 +76,13 @@ function postKcfxFormWithProgress(url, form, timeoutMs, onProgress) {
 
 async function loadSharedLibrary(options = {}) {
   const statusEl = options.statusEl || null;
-  const onProgress = typeof options.onProgress === "function" ? options.onProgress : null;
+  const onProgress = typeof options.onProgress === "function"
+    ? options.onProgress
+    : statusEl
+      ? ({ percent, message }) => {
+          statusEl.textContent = formatKcfxLoadProgress(message, percent);
+        }
+      : null;
   const metadataOnly = Boolean(options.metadataOnly);
   const targetIds = normalizeKcfxTargetIds(options.ids || options.targetIds);
   const targetKey = targetIds ? [...targetIds].sort().join(",") : "all";
@@ -88,6 +94,13 @@ async function loadSharedLibrary(options = {}) {
   const result = await kcSharedLibraryLoadPromises.get(promiseKey);
   if (statusEl) renderSharedLibraryStatus(statusEl, result);
   return result;
+}
+
+function formatKcfxLoadProgress(message, percent) {
+  const text = message || "正在读取腾讯云文件库";
+  const numericPercent = Number(percent);
+  if (!Number.isFinite(numericPercent)) return text;
+  return `${text} ${Math.round(numericPercent)}%`;
 }
 
 function normalizeKcfxTargetIds(ids) {
@@ -199,7 +212,11 @@ async function importLibraryManifestRecords(manifest, options = {}) {
     const local = await getRecord(id);
     let importRecord = record;
     if (!metadataOnly && !Array.isArray(importRecord.rows)) {
-      importRecord = await loadServerKcfxFullRecord(id, index, entries.length, onProgress);
+      if (canReuseLocalKcfxRows(importRecord, local)) {
+        importRecord = { ...importRecord, rows: getLatestUploadedRecord(local).rows };
+      } else {
+        importRecord = await loadServerKcfxFullRecord(id, index, entries.length, onProgress);
+      }
     }
     if (!metadataOnly && !Array.isArray(importRecord?.rows)) continue;
     if (
@@ -229,14 +246,30 @@ async function importLibraryManifestRecords(manifest, options = {}) {
 }
 
 async function loadServerKcfxFullRecord(id, index, total, onProgress) {
+  const percent = total ? 50 + Math.round((index / total) * 35) : 85;
   onProgress?.({
-    percent: total ? 50 + Math.round((index / total) * 35) : 85,
+    percent,
     message: `正在读取完整数据 ${index + 1}/${total}`
   });
   const response = await fetchKcfxApi(`${KC_SERVER_LIBRARY_API}/records/${encodeURIComponent(id)}?v=${Date.now()}`, { cache: "no-store" });
   if (!response.ok) throw new Error(`${id} HTTP ${response.status}`);
   const payload = await response.json();
   return payload.record || null;
+}
+
+function canReuseLocalKcfxRows(serverRecord = {}, localRecord = {}) {
+  const local = getLatestUploadedRecord(localRecord);
+  if (!Array.isArray(local?.rows) || !local.rows.length) return false;
+  if (serverRecord.serverFilePath && local.serverFilePath === serverRecord.serverFilePath) return true;
+  if (serverRecord.rowsPath && local.rowsPath === serverRecord.rowsPath) return true;
+  if (serverRecord.parseCompletedAt && local.parseCompletedAt === serverRecord.parseCompletedAt) return true;
+  if (serverRecord.serverSavedAt && local.serverSavedAt === serverRecord.serverSavedAt) return true;
+  return Boolean(
+    serverRecord.fileName
+    && local.fileName === serverRecord.fileName
+    && Number(local.size || 0) === Number(serverRecord.size || 0)
+    && Number(local.rowCount || local.rows.length || 0) === Number(serverRecord.rowCount || 0)
+  );
 }
 
 function getKcfxCurrentUser() {
@@ -318,9 +351,18 @@ async function deleteKcfxServerRecord(id) {
 function shouldImportSharedRecord(shared, local) {
   if (!local) return true;
   if (isDeletedRecord(local) || hasPendingRecord(local)) return false;
+  if (isKcfxServerRecord(shared) && isCompleteKcfxRecord(shared)) return true;
   if (isLocalBrowserRecord(local)) return false;
   if (recordIsNewer(shared, local)) return true;
   return sharedIsNotOlder(shared, local) && libraryRecordDiffers(shared, local);
+}
+
+function isKcfxServerRecord(record) {
+  return Boolean(record?.libraryManifestPath === KC_SERVER_LIBRARY_API || String(record?.libraryPath || '').startsWith(KC_SERVER_LIBRARY_API));
+}
+
+function isCompleteKcfxRecord(record) {
+  return Array.isArray(record?.rows) && (record.rows.length > 0 || Number(record.rowCount || 0) > 0);
 }
 
 function isLocalBrowserRecord(record) {
