@@ -838,13 +838,16 @@ th {
 }
 
 .embedded-dashboard-panel.is-background {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  min-height: 0;
+  position: fixed;
+  left: -120vw;
+  top: 0;
+  width: min(1440px, 100vw);
+  height: 900px;
+  min-height: 720px;
   overflow: hidden;
   opacity: 0;
   pointer-events: none;
+  visibility: hidden;
 }
 
 .embedded-dashboard-header {

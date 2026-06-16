@@ -1808,6 +1808,28 @@ function scheduleKcfxPreloadRefresh(db = null) {
   });
 }
 
+function filterKcfxPreloadCacheByIds(payload, idsParam) {
+  const ids = String(idsParam || '')
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean);
+  if (!ids.length) return payload;
+  const idSet = new Set(ids);
+  const records = Object.fromEntries(
+    Object.entries(payload.records || {}).filter(([id]) => idSet.has(id))
+  );
+  const rowCount = Object.values(records).reduce((total, record) => {
+    if (Array.isArray(record?.rows)) return total + record.rows.length;
+    return total + Number(record?.rowCount || 0);
+  }, 0);
+  return {
+    ...payload,
+    records,
+    recordCount: Object.keys(records).length,
+    rowCount
+  };
+}
+
 function sanitizeKcfxLibraryRecord(id, record = {}) {
   const sanitized = {
     ...record,
@@ -2245,7 +2267,7 @@ app.get('/api/kcfx-library/preloaded', async (req, res) => {
       await kcfxPreloadPromise;
     }
     res.setHeader('Cache-Control', 'no-store');
-    res.json(kcfxPreloadCache);
+    res.json(filterKcfxPreloadCacheByIds(kcfxPreloadCache, req.query.ids));
   } catch (error) {
     res.status(500).json({
       ...kcfxPreloadCache,

@@ -118,6 +118,14 @@ async function loadSharedLibrary(options = {}) {
       if (statusEl) renderSharedLibraryStatus(statusEl, localReadyResult);
       return localReadyResult;
     }
+    if (!isKcfxPreloadFrame()) {
+      await waitForKcfxPreload(targetIds, onProgress);
+      const postPreloadResult = await buildLocalReadyResult(targetIds);
+      if (postPreloadResult) {
+        if (statusEl) renderSharedLibraryStatus(statusEl, postPreloadResult);
+        return postPreloadResult;
+      }
+    }
   }
   const targetKey = targetIds ? [...targetIds].sort().join(",") : "all";
   const promiseKey = `${metadataOnly ? "metadata" : "full"}:${targetKey}`;
@@ -197,7 +205,7 @@ function formatKcfxLoadProgress(message, percent) {
 function startKcfxAutoPreload(options = {}) {
   if (kcAutoPreloadStarted && !options.force) return;
   kcAutoPreloadStarted = true;
-  const delayMs = Number.isFinite(Number(options.delayMs)) ? Number(options.delayMs) : 250;
+  const delayMs = Number.isFinite(Number(options.delayMs)) ? Number(options.delayMs) : 0;
   window.setTimeout(() => {
     writeKcfxPreloadState({ status: "loading" });
     loadSharedLibrary({
@@ -327,7 +335,9 @@ async function loadPreloadedServerKcfxFileLibrary(options = {}) {
   const onProgress = typeof options.onProgress === "function" ? options.onProgress : null;
   const targetIds = options.targetIds || null;
   onProgress?.({ percent: 22, message: "\u6b63\u5728\u8bfb\u53d6\u670d\u52a1\u5668\u5df2\u9884\u70ed\u6570\u636e..." });
-  const response = await fetchKcfxApi(`${KC_SERVER_PRELOADED_LIBRARY_API}?v=${Date.now()}`, { cache: "no-store" });
+  const query = new URLSearchParams({ v: String(Date.now()) });
+  if (targetIds) query.set("ids", [...targetIds].join(","));
+  const response = await fetchKcfxApi(`${KC_SERVER_PRELOADED_LIBRARY_API}?${query.toString()}`, { cache: "no-store" });
   if (!response.ok) throw new Error(`preloaded HTTP ${response.status}`);
   const payload = await response.json();
   if (!payload?.ok || payload.status !== "ready") {

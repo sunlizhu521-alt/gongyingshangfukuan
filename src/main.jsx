@@ -333,11 +333,11 @@ function App() {
   }
 
   function embeddedKcfxSrc(page) {
-    return `/kcfx/${page.sourceFile}?embed=1&v=20260616g`;
+    return `/kcfx/${page.sourceFile}?embed=1&v=20260616i`;
   }
 
   function preloadKcfxSrc() {
-    return `/kcfx/preload.html?preload=1&v=20260616m`;
+    return `/kcfx/preload.html?preload=1&v=20260616o`;
   }
 
   function assertApiResponse(label, response) {
@@ -420,6 +420,11 @@ function App() {
       setMessage(`后端服务连接失败：${error?.message || '请确认服务已启动。'}`);
     });
   }, [user]);
+
+  useEffect(() => {
+    if (!user || accessibleEmbeddedKcfxPages.length === 0) return;
+    fetch(`${API}/api/kcfx-library/preloaded?refresh=1`, { cache: 'no-store' }).catch(() => {});
+  }, [user, accessibleEmbeddedKcfxPages.length]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2380,6 +2385,7 @@ function App() {
                       title={page.label}
                       src={embeddedKcfxSrc(page)}
                       data-tab={page.tab}
+                      loading="eager"
                       onLoad={(event) => applyEmbeddedDashboardChrome(event, page.tab)}
                     />
                     {isActiveEmbeddedFrame && activeEmbeddedKcfxLoading && (
