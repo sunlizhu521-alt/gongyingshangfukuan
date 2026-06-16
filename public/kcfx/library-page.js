@@ -156,6 +156,7 @@ async function uploadAllToServer() {
 
   if (button) button.disabled = true;
   setLibraryStatus(`正在上传 ${uploadableSlots.length} 个文件到腾讯云服务器...`);
+  const uploadSlotIds = uploadableSlots.map(({ slot }) => slot.id);
   let uploaded = 0;
   let queued = 0;
   try {
@@ -177,7 +178,7 @@ async function uploadAllToServer() {
     await loadSharedLibrary({ statusEl: $("#sharedStatus"), force: true });
     await renderLibrary();
     if (queued) {
-      scheduleServerParseRefresh();
+      scheduleServerParseRefresh(uploadSlotIds);
       setLibraryStatus(`已保存 ${uploaded} 个原始文件到腾讯云服务器，后台解析中。`);
       return;
     }
@@ -192,21 +193,48 @@ async function uploadAllToServer() {
 let serverParseRefreshTimer = null;
 let serverParseRefreshCount = 0;
 
-function shouldWaitForServerParse(records) {
-  return Object.values(records || {}).some((record) => ["queued", "parsing"].includes(record?.parseStatus));
+function refreshRecordsForIds(records, ids = null) {
+  const values = Object.values(records || {});
+  if (!ids?.length) return values;
+  const targetIds = new Set(ids);
+  return values.filter((record) => targetIds.has(record?.id));
 }
 
-function scheduleServerParseRefresh() {
+function shouldWaitForServerParse(records, ids = null) {
+  return refreshRecordsForIds(records, ids).some((record) => ["queued", "parsing"].includes(record?.parseStatus));
+}
+
+function summarizeServerParse(records, ids = null) {
+  const parsedRecords = refreshRecordsForIds(records, ids);
+  const failed = parsedRecords.filter((record) => record?.parseStatus === "failed");
+  const ready = parsedRecords.filter((record) => record?.parseStatus === "ready");
+  return { failed, ready };
+}
+
+function scheduleServerParseRefresh(ids = null) {
   window.clearTimeout(serverParseRefreshTimer);
   serverParseRefreshTimer = window.setTimeout(async () => {
     serverParseRefreshCount += 1;
-    const result = await loadSharedLibrary({ statusEl: $("#sharedStatus"), force: true, metadataOnly: true }).catch(() => null);
+    const result = await loadSharedLibrary({ statusEl: $("#sharedStatus"), force: true, ids }).catch(() => null);
     await renderLibrary();
     const records = result?.manifest?.records || {};
-    if (serverParseRefreshCount < 8 && shouldWaitForServerParse(records)) {
-      scheduleServerParseRefresh();
+    if (serverParseRefreshCount < 8 && shouldWaitForServerParse(records, ids)) {
+      setLibraryStatus("腾讯云服务器正在解析文件，请稍后...");
+      scheduleServerParseRefresh(ids);
     } else {
+      const { failed, ready } = summarizeServerParse(records, ids);
       serverParseRefreshCount = 0;
+      if (failed.length) {
+        const names = failed.map((record) => record.title || record.id).join("、");
+        setLibraryStatus(`服务器解析失败：${names}。请查看槽位错误信息后重新上传。`);
+        setLibraryLoadProgress(100, "服务器解析失败，请查看槽位错误信息。");
+        return;
+      }
+      if (ready.length) {
+        setLibraryStatus(`服务器解析完成：${ready.length} 个文件已保存并可用于看板。`);
+        setLibraryLoadProgress(100, "服务器解析完成，文件已可用于看板。");
+        window.setTimeout(() => setLibraryLoadProgress(0, "", { hidden: true }), 1200);
+      }
     }
   }, 3000);
 }
@@ -531,7 +559,7 @@ async function saveSlot(slotId) {
     setLibraryLoadProgress(100, "已完成：已保存到腾讯云服务器。");
     if (nextRecord?.parseStatus && nextRecord.parseStatus !== "ready") {
       status.textContent = "已保存到腾讯云服务器，后台解析中。";
-      scheduleServerParseRefresh();
+      scheduleServerParseRefresh([slotId]);
       await renderLibrary();
       return;
     }
@@ -575,7 +603,7 @@ async function saveSlotFile(slotId, file) {
     setLibraryLoadProgress(100, "已完成：已保存到腾讯云服务器。");
     if (nextRecord?.parseStatus && nextRecord.parseStatus !== "ready") {
       status.textContent = "已保存到腾讯云服务器，后台解析中。";
-      scheduleServerParseRefresh();
+      scheduleServerParseRefresh([slotId]);
       await renderLibrary();
       return;
     }
