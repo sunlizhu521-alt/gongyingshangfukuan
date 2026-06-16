@@ -50,8 +50,8 @@ const DIMENSION_SLOTS = [
   {
     id: "dim-purchase-division",
     type: "dimension",
-    title: "维度 6",
-    expectedName: "维度 6",
+    title: "采购分工明细",
+    expectedName: "采购分工明细",
     sheetHint: "",
     description: "预留维度槽位。"
   },
