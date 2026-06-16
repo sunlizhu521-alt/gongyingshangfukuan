@@ -44,6 +44,7 @@ const MAINTENANCE_LIBRARY_PAGES = [
 ];
 
 const EMBEDDED_KCFX_PAGES = [...SALES_INVENTORY_PAGES, ...MAINTENANCE_LIBRARY_PAGES];
+const PRIORITY_KCFX_PRELOAD_TABS = new Set(['salesInventoryReceiptSummary', 'salesInventorySalesAnalysis']);
 
 const SYSTEM_FILE_LIBRARY_PAGES = [
   { tab: 'systemMigrationPackage', key: 'migrationPackage', label: '迁移备份包' },
@@ -107,6 +108,7 @@ function App() {
   const [embeddedFrameReady, setEmbeddedFrameReady] = useState({});
   const [embeddedSwitchingTab, setEmbeddedSwitchingTab] = useState('');
   const [embeddedLoadProgress, setEmbeddedLoadProgress] = useState({});
+  const [mountedKcfxTabs, setMountedKcfxTabs] = useState(() => new Set());
   const [supplierImportResult, setSupplierImportResult] = useState(null);
   const [ownerImportResult, setOwnerImportResult] = useState(null);
   const [inspectionInitialData, setInspectionInitialData] = useState({ sheetName: '', columns: [], rows: [], updatedAt: '' });
@@ -251,6 +253,9 @@ function App() {
     ? embeddedKcfxPageMap[activeTab]
     : null;
   const accessibleEmbeddedKcfxPages = EMBEDDED_KCFX_PAGES.filter((page) => canAccessTab(page.tab));
+  const mountedEmbeddedKcfxPages = accessibleEmbeddedKcfxPages.filter((page) => (
+    mountedKcfxTabs.has(page.tab) || activeTab === page.tab
+  ));
   const activeEmbeddedKcfxFrameReady = activeEmbeddedKcfxPage
     ? Boolean(embeddedFrameReady[activeEmbeddedKcfxPage.tab])
     : false;
@@ -267,6 +272,10 @@ function App() {
       return new Set([...current, group]);
     });
     if (embeddedKcfxPageMap[tab]) {
+      setMountedKcfxTabs((current) => {
+        if (current.has(tab)) return current;
+        return new Set([...current, tab]);
+      });
       setEmbeddedSwitchingTab(tab);
       setEmbeddedLoadProgress((current) => ({ ...current, [tab]: embeddedFrameReady[tab] ? 82 : 8 }));
     } else {
@@ -333,11 +342,11 @@ function App() {
   }
 
   function embeddedKcfxSrc(page) {
-    return `/kcfx/${page.sourceFile}?embed=1&v=20260616j`;
+    return `/kcfx/${page.sourceFile}?embed=1&v=20260616k`;
   }
 
   function preloadKcfxSrc() {
-    return `/kcfx/preload.html?preload=1&v=20260616p`;
+    return `/kcfx/preload.html?preload=1&v=20260616q`;
   }
 
   function assertApiResponse(label, response) {
@@ -423,8 +432,37 @@ function App() {
 
   useEffect(() => {
     if (!user || accessibleEmbeddedKcfxPages.length === 0) return;
-    fetch(`${API}/api/kcfx-library/preloaded?refresh=1`, { cache: 'no-store' }).catch(() => {});
+    const ids = [
+      'sales-data',
+      'fact-inventory',
+      'fact-2',
+      'dim-product',
+      'dim-warehouse',
+      'dim-warehouse-material',
+      'dim-store-name',
+      'dim-customer-material'
+    ].join(',');
+    fetch(`${API}/api/kcfx-library/preloaded?ids=${encodeURIComponent(ids)}`, { cache: 'no-store' }).catch(() => {});
   }, [user, accessibleEmbeddedKcfxPages.length]);
+
+  useEffect(() => {
+    if (!user || accessibleEmbeddedKcfxPages.length === 0) return undefined;
+    setMountedKcfxTabs((current) => {
+      const next = new Set(current);
+      accessibleEmbeddedKcfxPages.forEach((page) => {
+        if (PRIORITY_KCFX_PRELOAD_TABS.has(page.tab)) next.add(page.tab);
+      });
+      if (activeEmbeddedKcfxPage) next.add(activeEmbeddedKcfxPage.tab);
+      return next;
+    });
+    const timer = window.setTimeout(() => {
+      setMountedKcfxTabs((current) => new Set([
+        ...current,
+        ...accessibleEmbeddedKcfxPages.map((page) => page.tab)
+      ]));
+    }, 8000);
+    return () => window.clearTimeout(timer);
+  }, [user, accessibleEmbeddedKcfxPages.length, activeEmbeddedKcfxPage?.tab]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2375,7 +2413,7 @@ function App() {
               </div>
             )}
             <div className="embedded-dashboard-frame-stack">
-              {accessibleEmbeddedKcfxPages.map((page) => {
+              {mountedEmbeddedKcfxPages.map((page) => {
                 const isActiveEmbeddedFrame = activeTab === page.tab;
                 const isEmbeddedFrameReady = Boolean(embeddedFrameReady[page.tab]);
                 return (

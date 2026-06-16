@@ -133,6 +133,16 @@ const KC_LIBRARY_SLOT_IDS = new Set([
   'fact-8',
   'sales-data'
 ]);
+const KC_PRIORITY_PRELOAD_SLOT_IDS = new Set([
+  'sales-data',
+  'fact-inventory',
+  'fact-2',
+  'dim-product',
+  'dim-warehouse',
+  'dim-warehouse-material',
+  'dim-store-name',
+  'dim-customer-material'
+]);
 const PERMISSION_GROUPS = [
   {
     value: 'supplierPayment',
@@ -1787,7 +1797,7 @@ async function refreshKcfxPreloadCache(db = null) {
     completedAt: '',
     error: ''
   };
-  kcfxPreloadPromise = buildPreloadedKcfxLibrary(db)
+  kcfxPreloadPromise = buildPreloadedKcfxLibrary(db, { targetIds: KC_PRIORITY_PRELOAD_SLOT_IDS })
     .then((payload) => {
       kcfxPreloadCache = {
         ...payload,

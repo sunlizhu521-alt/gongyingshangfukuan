@@ -11,20 +11,11 @@ const KC_AUTO_PRELOAD_RECORD_IDS = [
   "sales-data",
   "fact-inventory",
   "fact-2",
-  "fact-3",
-  "fact-4",
-  "fact-5",
-  "fact-6",
-  "fact-7",
-  "fact-8",
   "dim-product",
   "dim-warehouse",
   "dim-warehouse-material",
   "dim-store-name",
-  "dim-customer-material",
-  "dim-purchase-division",
-  "dim-7",
-  "dim-8"
+  "dim-customer-material"
 ];
 const kcSharedLibraryLoadPromises = new Map();
 let kcAutoPreloadStarted = false;
@@ -118,14 +109,6 @@ async function loadSharedLibrary(options = {}) {
     if (localReadyResult) {
       if (statusEl) renderSharedLibraryStatus(statusEl, localReadyResult);
       return localReadyResult;
-    }
-    if (!isKcfxPreloadFrame()) {
-      await waitForKcfxPreload(targetIds, onProgress);
-      const postPreloadResult = await buildLocalReadyResult(targetIds);
-      if (postPreloadResult) {
-        if (statusEl) renderSharedLibraryStatus(statusEl, postPreloadResult);
-        return postPreloadResult;
-      }
     }
   }
   const targetKey = targetIds ? [...targetIds].sort().join(",") : "all";
