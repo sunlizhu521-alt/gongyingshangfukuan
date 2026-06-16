@@ -3,7 +3,27 @@ const KC_SERVER_LIBRARY_API = `${resolveKcfxApiBase()}/api/kcfx-library`;
 const KC_SYSTEM_OWNER_NAME = "孙立柱";
 const KC_SERVER_LOAD_TIMEOUT_MS = 15000;
 const KC_SERVER_UPLOAD_TIMEOUT_MS = 10 * 60 * 1000;
+const KC_AUTO_PRELOAD_RECORD_IDS = [
+  "sales-data",
+  "fact-inventory",
+  "fact-2",
+  "fact-3",
+  "fact-4",
+  "fact-5",
+  "fact-6",
+  "fact-7",
+  "fact-8",
+  "dim-product",
+  "dim-warehouse",
+  "dim-warehouse-material",
+  "dim-store-name",
+  "dim-customer-material",
+  "dim-purchase-division",
+  "dim-7",
+  "dim-8"
+];
 const kcSharedLibraryLoadPromises = new Map();
+let kcAutoPreloadStarted = false;
 
 function resolveKcfxApiBase() {
   const { hostname, port } = window.location;
@@ -101,6 +121,29 @@ function formatKcfxLoadProgress(message, percent) {
   const numericPercent = Number(percent);
   if (!Number.isFinite(numericPercent)) return text;
   return `${text} ${Math.round(numericPercent)}%`;
+}
+
+function startKcfxAutoPreload(options = {}) {
+  if (kcAutoPreloadStarted && !options.force) return;
+  kcAutoPreloadStarted = true;
+  const delayMs = Number.isFinite(Number(options.delayMs)) ? Number(options.delayMs) : 250;
+  window.setTimeout(() => {
+    loadSharedLibrary({
+      ids: KC_AUTO_PRELOAD_RECORD_IDS,
+      force: Boolean(options.force),
+      onProgress: options.onProgress
+    }).catch((error) => {
+      console.warn("kcfx auto preload failed", error);
+    });
+  }, delayMs);
+}
+
+function scheduleKcfxAutoPreload() {
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => startKcfxAutoPreload(), { once: true });
+    return;
+  }
+  startKcfxAutoPreload();
 }
 
 function normalizeKcfxTargetIds(ids) {
@@ -477,6 +520,9 @@ async function downloadSharedLibrary() {
   link.click();
   URL.revokeObjectURL(url);
 }
+
+window.startKcfxAutoPreload = startKcfxAutoPreload;
+scheduleKcfxAutoPreload();
 
 async function importSharedLibraryFile(event) {
   const input = event.target;
