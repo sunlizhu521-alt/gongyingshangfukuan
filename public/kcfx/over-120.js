@@ -45,10 +45,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     $(`#${id}`)?.addEventListener("change", renderPage);
   });
   await refreshOver120();
+  loadSharedLibrary({ statusEl: $("#over120Status"), ids: ["fact-2", "dim-product", "dim-warehouse", "dim-warehouse-material"] })
+    .then(refreshOver120)
+    .catch((error) => {
+      $("#over120Status").textContent = `腾讯云数据同步失败：${error?.message || error}`;
+    });
 });
 
 async function refreshOver120() {
-  await loadSharedLibrary({ statusEl: $("#over120Status") });
   const records = Object.fromEntries((await getActiveRecords()).map((record) => [record.id, record]));
   const detailRecord = records["fact-2"];
   const productRecord = records["dim-product"];

@@ -76,10 +76,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   });
   await refreshSummary();
+  loadSharedLibrary({ statusEl: $("#summaryStatus"), ids: ["fact-inventory", "fact-2", "dim-product", "dim-warehouse", "dim-warehouse-material"] })
+    .then(refreshSummary)
+    .catch((error) => {
+      $("#summaryStatus").textContent = `腾讯云数据同步失败：${error?.message || error}`;
+    });
 });
 
 async function refreshSummary() {
-  await loadSharedLibrary({ statusEl: $("#summaryStatus") });
   const records = Object.fromEntries((await getActiveRecords()).map((record) => [record.id, record]));
   const inventoryRecord = records["fact-inventory"];
   const detailRecord = records["fact-2"];

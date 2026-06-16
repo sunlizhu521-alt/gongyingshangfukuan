@@ -44,8 +44,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
   $("#seriesFilter").addEventListener("change", renderCurrentDiffTable);
   $("#downloadBtn").addEventListener("click", downloadCurrentDiffTable);
-  await loadSharedLibrary({ statusEl: $("#compareStatus") });
   await runComparison();
+  loadSharedLibrary({ statusEl: $("#compareStatus"), ids: ["fact-inventory", "fact-2", "dim-product", "dim-warehouse-material"] })
+    .then(runComparison)
+    .catch((error) => {
+      $("#compareStatus").textContent = `腾讯云数据同步失败：${error?.message || error}`;
+    });
 });
 
 async function runComparison() {

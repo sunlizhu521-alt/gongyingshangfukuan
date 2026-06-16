@@ -27,9 +27,12 @@ async function initTrendDashboard() {
   document.querySelector("#downloadTrendUnclassifiedBtn")?.addEventListener("click", downloadTrendUnclassifiedRows);
   document.querySelector("#clearTrendFiltersBtn")?.addEventListener("click", clearTrendFilters);
   document.addEventListener("click", closeTrendFilters);
-  await loadSharedLibrary({ statusEl });
-  const records = Object.fromEntries((await getActiveRecords()).map((record) => [record.id, record]));
-  renderTrendDashboard(records);
+  await renderTrendDashboardFromCache();
+  loadSharedLibrary({ statusEl, ids: [...TREND_MONTHS.map((month) => month.id), "dim-product", "dim-warehouse", "dim-warehouse-material"] })
+    .then(renderTrendDashboardFromCache)
+    .catch((error) => {
+      if (statusEl) statusEl.textContent = `腾讯云数据同步失败：${error?.message || error}`;
+    });
 }
 
 if (document.readyState === "loading") {
@@ -56,6 +59,11 @@ function renderTrendDashboard(records) {
   renderTrendSourcePanel(monthSummaries, records);
   trendUnclassifiedRows = monthSummaries.flatMap((item) => item.unclassifiedRows);
   renderTrendUnclassifiedRows(trendUnclassifiedRows);
+}
+
+async function renderTrendDashboardFromCache() {
+  const records = Object.fromEntries((await getActiveRecords()).map((record) => [record.id, record]));
+  renderTrendDashboard(records);
 }
 
 function renderTrendCharts() {

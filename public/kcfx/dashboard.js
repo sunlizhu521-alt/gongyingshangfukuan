@@ -35,12 +35,16 @@ const DEPARTMENT_ORDER = [
 const $ = (selector) => document.querySelector(selector);
 
 document.addEventListener("DOMContentLoaded", async () => {
-  await loadSharedLibrary({ statusEl: $("#sharedStatus") });
   $("#refreshBtn").addEventListener("click", clearFilters);
   ["priceBasisFilter", "departmentFilter", "productLineFilter", "seriesFilter", "warehouseTypeFilter", "warehouseLocationFilter", "searchInput"].forEach((id) => {
     $(`#${id}`).addEventListener(id === "searchInput" ? "input" : "change", renderDashboard);
   });
   await refreshDashboard();
+  loadSharedLibrary({ statusEl: $("#sharedStatus"), ids: DASHBOARD_REQUIRED_SLOTS })
+    .then(refreshDashboard)
+    .catch((error) => {
+      $("#sharedStatus").textContent = `腾讯云数据同步失败：${error?.message || error}`;
+    });
 });
 
 async function refreshDashboard() {

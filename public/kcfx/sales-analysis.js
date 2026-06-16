@@ -40,19 +40,21 @@ document.addEventListener("DOMContentLoaded", async () => {
     $(`#${filter.id}`)?.addEventListener("change", () => handleSalesInventoryTrendFilterChange());
   });
   await refreshSalesAnalysis();
-});
-
-async function refreshSalesAnalysis() {
-  $("#salesStatus").textContent = "正在从腾讯云读取销售数据文件...";
-  await loadSharedLibrary({
+  loadSharedLibrary({
     statusEl: $("#salesStatus"),
     ids: SALES_ANALYSIS_REQUIRED_RECORD_IDS,
-    force: true,
     onProgress: ({ percent, message }) => {
       const value = Number.isFinite(Number(percent)) ? ` ${Math.round(Number(percent))}%` : "";
       $("#salesStatus").textContent = `${message || "正在从腾讯云读取销售数据文件..."}${value}`;
     }
-  });
+  })
+    .then(refreshSalesAnalysis)
+    .catch((error) => {
+      $("#salesStatus").textContent = `腾讯云数据同步失败：${error?.message || error}`;
+    });
+});
+
+async function refreshSalesAnalysis() {
   const records = Object.fromEntries((await getActiveRecords()).map((record) => [record.id, record]));
   const salesRecord = records["sales-data"];
   const productMap = mapProducts(records["dim-product"]?.rows || []);

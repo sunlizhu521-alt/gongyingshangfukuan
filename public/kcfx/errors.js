@@ -12,8 +12,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.querySelectorAll("[data-download-error]").forEach((button) => {
     button.addEventListener("click", () => downloadSingleErrorTable(button.dataset.downloadError));
   });
-  await loadSharedLibrary({ statusEl: $("#checkStatus") });
   await runErrorChecks();
+  loadSharedLibrary({ statusEl: $("#checkStatus"), ids: ["fact-inventory", "fact-2", "sales-data", "dim-product", "dim-warehouse", "dim-warehouse-material", "dim-store-name", "dim-customer-material"] })
+    .then(runErrorChecks)
+    .catch((error) => {
+      $("#checkStatus").textContent = `腾讯云数据同步失败：${error?.message || error}`;
+    });
 });
 
 async function runErrorChecks() {

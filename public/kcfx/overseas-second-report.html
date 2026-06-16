@@ -593,7 +593,6 @@
     }
 
     async function loadWarehouseExceptions() {
-      if (typeof loadSharedLibrary === "function") await loadSharedLibrary();
       const records = {};
       const recordIds = [
         "dim-product",
@@ -981,6 +980,17 @@
       if (status) status.textContent = `仓库未分类异常明细读取失败：${error.message}`;
       if (body) body.innerHTML = `<tr><td colspan="12" class="empty">读取失败，请刷新后重试</td></tr>`;
     });
+    if (typeof loadSharedLibrary === "function") {
+      loadSharedLibrary({
+        statusEl: document.getElementById("warehouseExceptionStatus"),
+        ids: ["dim-product", "dim-warehouse", "dim-warehouse-material", "fact-2", ...WAREHOUSE_EXCEPTION_MONTHS.map((month) => month.id)]
+      })
+        .then(loadWarehouseExceptions)
+        .catch((error) => {
+          const status = document.getElementById("warehouseExceptionStatus");
+          if (status) status.textContent = `腾讯云数据同步失败：${error?.message || error}`;
+        });
+    }
   </script>
 </body>
 </html>
