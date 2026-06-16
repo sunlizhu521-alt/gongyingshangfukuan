@@ -52,7 +52,7 @@ const DIMENSION_SLOTS = [
     type: "dimension",
     title: "采购分工明细",
     expectedName: "采购分工明细",
-    sheetHint: "",
+    sheetHint: "产品线明细",
     description: "预留维度槽位。"
   },
   {

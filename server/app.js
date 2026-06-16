@@ -2039,7 +2039,7 @@ function parseKcfxSlotPayload(slotId, payload) {
     type: String(slot.type || ''),
     title: String(slot.title || slotId),
     expectedName: String(slot.expectedName || ''),
-    sheetHint: String(slot.sheetHint || ''),
+    sheetHint: String(slot.sheetHint || (slotId === 'dim-purchase-division' ? '产品线明细' : '')),
     skipRows: Number.isInteger(Number(slot.skipRows)) ? Number(slot.skipRows) : undefined
   };
 }
