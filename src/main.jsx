@@ -21,14 +21,19 @@ const INSPECTION_NOTICE_FIELDS = [
   { key: 'businessDepartments', label: '事业部', multiSelect: true },
   { key: 'operation', label: '运营' },
   { key: 'firstInspection', label: '是否首批验货', select: true, options: ['是', '否'], placeholder: '选择' },
-  { key: 'salesProductLine', label: '销售产品线' },
-  { key: 'series', label: '系列' },
+  { key: 'salesProductLine', label: '产品线', select: true, placeholder: '选择产品线' },
+  { key: 'series', label: '系列', select: true, placeholder: '选择系列' },
   { key: 'totalQuantity', label: '合计数量' },
   { key: 'skuQuantity', label: 'SKU及数量', multiline: true },
   { key: 'remark', label: '备注', multiline: true }
 ];
 
 const INSPECTION_DEPARTMENT_OPTIONS = ['海外事业部一部', '海外事业二部', '国内事业部', '全球招商部', '其他部门'];
+const INSPECTION_LIBRARY_RECORD_IDS = ['dim-purchase-division', 'dim-product'];
+const PURCHASE_DIVISION_SUPPLIER_COLUMN = 9;
+const PURCHASE_DIVISION_ADDRESS_COLUMN = 12;
+const PRODUCT_LINE_COLUMN = 7;
+const PRODUCT_SERIES_COLUMN = 8;
 
 const SALES_INVENTORY_PAGES = [
   { tab: 'salesInventoryReceiptSummary', key: 'receiptSummary', label: '供应链库存分析', sourceFile: 'receipt-summary.html' },
@@ -76,6 +81,31 @@ function createInspectionNoticeRow(values = {}) {
   });
 }
 
+function normalizeOptionText(value) {
+  return String(value ?? '').trim();
+}
+
+function readPhysicalColumn(row, oneBasedIndex) {
+  const index = oneBasedIndex - 1;
+  if (Array.isArray(row?.__cells)) return normalizeOptionText(row.__cells[index]);
+  const values = Object.entries(row || {})
+    .filter(([key]) => key !== '__cells' && !key.startsWith('__'))
+    .map(([, value]) => value);
+  return normalizeOptionText(values[index]);
+}
+
+function uniqueOptionValues(values) {
+  const seen = new Set();
+  return values
+    .map(normalizeOptionText)
+    .filter(Boolean)
+    .filter((value) => {
+      if (seen.has(value)) return false;
+      seen.add(value);
+      return true;
+    });
+}
+
 function App() {
   const [activeTab, setActiveTab] = useState('ledger');
   const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('invoiceUser') || 'null'));
@@ -115,6 +145,7 @@ function App() {
   const [inspectionInitialImportResult, setInspectionInitialImportResult] = useState(null);
   const [inspectionNoticeSubmission, setInspectionNoticeSubmission] = useState({ rows: [], submittedAt: '', submittedBy: '' });
   const [inspectionNoticeRows, setInspectionNoticeRows] = useState(() => [createInspectionNoticeRow()]);
+  const [inspectionLibraryRecords, setInspectionLibraryRecords] = useState({});
   const [dimensionShortNameFilter, setDimensionShortNameFilter] = useState([]);
   const [dimensionOwnerFilter, setDimensionOwnerFilter] = useState([]);
   const [dimensionAnnualFilter, setDimensionAnnualFilter] = useState([]);
@@ -358,7 +389,8 @@ function App() {
 
   async function loadData() {
     const params = user ? `?user=${encodeURIComponent(user.name)}&role=${encodeURIComponent(user.role)}` : '';
-    const [invoiceRes, draftRes, supplierRes, ownerRes, reminderRes, settingsRes, usersRes, inspectionInitialRes, inspectionNoticeRes, systemFilePackagesRes] = await Promise.all([
+    const inspectionLibraryIds = INSPECTION_LIBRARY_RECORD_IDS.join(',');
+    const [invoiceRes, draftRes, supplierRes, ownerRes, reminderRes, settingsRes, usersRes, inspectionInitialRes, inspectionNoticeRes, inspectionLibraryRes, systemFilePackagesRes] = await Promise.all([
       fetch(`${API}/api/invoices${params}`),
       fetch(`${API}/api/drafts${params}`),
       fetch(`${API}/api/suppliers`),
@@ -368,6 +400,7 @@ function App() {
       canManagePermissions ? fetch(`${API}/api/users${params}`) : Promise.resolve(null),
       canAccessTab('inspectionInitialData') ? fetch(`${API}/api/quality-inspection/initial-data${params}`) : Promise.resolve(null),
       canAccessTab('inspectionNotice') ? fetch(`${API}/api/quality-inspection/notices${params}`) : Promise.resolve(null),
+      canAccessTab('inspectionNotice') ? fetch(`${API}/api/kcfx-library/preloaded?ids=${encodeURIComponent(inspectionLibraryIds)}`, { cache: 'no-store' }) : Promise.resolve(null),
       canManageSystemFiles ? fetch(`${API}/api/system-file-library${params}`) : Promise.resolve(null)
     ]);
     [
@@ -380,6 +413,7 @@ function App() {
       ['权限管理', usersRes],
       ['验货信息初始数据', inspectionInitialRes],
       ['验货通知', inspectionNoticeRes],
+      ['验货通知维度数据', inspectionLibraryRes],
       ['系统文件库', systemFilePackagesRes]
     ].forEach(([label, response]) => assertApiResponse(label, response));
     setInvoices(await invoiceRes.json());
@@ -416,6 +450,12 @@ function App() {
     } else if (!canAccessTab('inspectionNotice')) {
       setInspectionNoticeSubmission({ rows: [], submittedAt: '', submittedBy: '' });
       setInspectionNoticeRows([createInspectionNoticeRow({ inspectionApplicant: user.name })]);
+    }
+    if (inspectionLibraryRes?.ok) {
+      const inspectionLibrary = await inspectionLibraryRes.json();
+      setInspectionLibraryRecords(inspectionLibrary.records || {});
+    } else if (!canAccessTab('inspectionNotice')) {
+      setInspectionLibraryRecords({});
     }
     if (systemFilePackagesRes?.ok) {
       setSystemFilePackages(await systemFilePackagesRes.json());
@@ -579,7 +619,10 @@ function App() {
   }
 
   function findSupplierAddressByShortName(shortName) {
-    const normalizedShortName = normalizeSupplierName(shortName);
+    const textShortName = normalizeOptionText(shortName);
+    const addressFromPurchaseDivision = inspectionSupplierAddressByShortName.get(textShortName);
+    if (addressFromPurchaseDivision) return addressFromPurchaseDivision;
+    const normalizedShortName = normalizeSupplierName(textShortName);
     if (!normalizedShortName) return '';
     const supplier = suppliers.find((item) =>
       normalizeSupplierName(item.shortName) === normalizedShortName ||
@@ -769,9 +812,46 @@ function App() {
       };
     });
   }, [ownerBySupplier, suppliers]);
+  const inspectionPurchaseDivisionRows = useMemo(() => {
+    return inspectionLibraryRecords['dim-purchase-division']?.rows || [];
+  }, [inspectionLibraryRecords]);
+  const inspectionProductRows = useMemo(() => {
+    return inspectionLibraryRecords['dim-product']?.rows || [];
+  }, [inspectionLibraryRecords]);
+  const inspectionSupplierAddressByShortName = useMemo(() => {
+    const result = new Map();
+    inspectionPurchaseDivisionRows.forEach((row) => {
+      const shortName = readPhysicalColumn(row, PURCHASE_DIVISION_SUPPLIER_COLUMN);
+      if (!shortName || result.has(shortName)) return;
+      result.set(shortName, extractProvinceCity(readPhysicalColumn(row, PURCHASE_DIVISION_ADDRESS_COLUMN)));
+    });
+    return result;
+  }, [inspectionPurchaseDivisionRows]);
   const inspectionSupplierShortNameOptions = useMemo(() => {
-    return uniqueValueOptions(appliedDimensionRows.map((row) => row.shortName));
-  }, [appliedDimensionRows]);
+    return uniqueValueOptions(inspectionPurchaseDivisionRows.map((row) => readPhysicalColumn(row, PURCHASE_DIVISION_SUPPLIER_COLUMN)));
+  }, [inspectionPurchaseDivisionRows]);
+  const inspectionProductLineOptions = useMemo(() => {
+    return uniqueValueOptions(inspectionProductRows.map((row) => readPhysicalColumn(row, PRODUCT_LINE_COLUMN)));
+  }, [inspectionProductRows]);
+  const inspectionSeriesByProductLine = useMemo(() => {
+    const result = new Map();
+    inspectionProductRows.forEach((row) => {
+      const productLine = readPhysicalColumn(row, PRODUCT_LINE_COLUMN);
+      const series = readPhysicalColumn(row, PRODUCT_SERIES_COLUMN);
+      if (!productLine || !series) return;
+      if (!result.has(productLine)) result.set(productLine, []);
+      result.get(productLine).push(series);
+    });
+    return new Map([...result.entries()].map(([productLine, values]) => [productLine, uniqueOptionValues(values)]));
+  }, [inspectionProductRows]);
+  useEffect(() => {
+    if (!user || inspectionSupplierAddressByShortName.size === 0) return;
+    setInspectionNoticeRows((rows) => rows.map((row) => {
+      const address = inspectionSupplierAddressByShortName.get(normalizeOptionText(row.supplierShortName));
+      if (!address || row.supplierAddress === address) return row;
+      return { ...row, supplierAddress: address };
+    }));
+  }, [inspectionSupplierAddressByShortName, user]);
   const dimensionShortNameOptions = useMemo(() => {
     return uniqueValueOptions(suppliers.map((supplier) => supplier.shortName));
   }, [suppliers]);
@@ -1075,15 +1155,27 @@ function App() {
     setMessage(`验货信息初始数据已读取：成功 ${result.importedCount || 0} 行。`);
   }
 
+  function inspectionSeriesOptionsForProductLine(productLine) {
+    const values = inspectionSeriesByProductLine.get(productLine) || [];
+    return uniqueValueOptions(values);
+  }
+
   function updateInspectionNoticeRow(id, field, value) {
     setInspectionNoticeRows((rows) => rows.map((row) => (
       row.id === id
-        ? {
-            ...row,
-            [field]: value,
-            inspectionApplicant: user.name,
-            supplierAddress: field === 'supplierShortName' ? findSupplierAddressByShortName(value) : row.supplierAddress
-          }
+        ? (() => {
+            const nextRow = {
+              ...row,
+              [field]: value,
+              inspectionApplicant: user.name,
+              supplierAddress: field === 'supplierShortName' ? findSupplierAddressByShortName(value) : row.supplierAddress
+            };
+            if (field === 'salesProductLine') {
+              const allowedSeries = new Set((inspectionSeriesByProductLine.get(value) || []));
+              nextRow.series = allowedSeries.has(row.series) ? row.series : '';
+            }
+            return nextRow;
+          })()
         : row
     )));
   }
@@ -2342,18 +2434,26 @@ function App() {
                   if (field.select) {
                     const baseOptions = field.key === 'supplierShortName'
                       ? inspectionSupplierShortNameOptions
-                      : (field.options || []).map((option) => ({ value: option, label: option }));
+                      : field.key === 'salesProductLine'
+                        ? inspectionProductLineOptions
+                        : field.key === 'series'
+                          ? inspectionSeriesOptionsForProductLine(row.salesProductLine)
+                          : (field.options || []).map((option) => ({ value: option, label: option }));
                     const hasCurrentValue = row[field.key] && !baseOptions.some((option) => option.value === row[field.key]);
                     const options = hasCurrentValue
                       ? [{ value: row[field.key], label: row[field.key] }, ...baseOptions]
                       : baseOptions;
+                    const placeholder = field.key === 'series' && !row.salesProductLine
+                      ? '先选择产品线'
+                      : field.placeholder || (field.key === 'supplierShortName' ? '选择供应商' : '选择');
                     return (
                       <select
                         className="table-input inspection-notice-input"
                         value={row[field.key] || ''}
+                        disabled={field.key === 'series' && !row.salesProductLine}
                         onChange={(event) => updateInspectionNoticeRow(row.id, field.key, event.target.value)}
                       >
-                        <option value="">{field.placeholder || (field.key === 'supplierShortName' ? '选择供应商' : '选择')}</option>
+                        <option value="">{placeholder}</option>
                         {options.map((option) => (
                           <option key={option.value} value={option.value}>{option.label}</option>
                         ))}
