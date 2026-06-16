@@ -104,6 +104,8 @@ function App() {
   const [oaSubmitWeekFilter, setOaSubmitWeekFilter] = useState([]);
   const [openFilter, setOpenFilter] = useState('');
   const [expandedMenuGroups, setExpandedMenuGroups] = useState(() => new Set(['supplierPayment']));
+  const [embeddedFrameReady, setEmbeddedFrameReady] = useState({});
+  const [embeddedSwitchingTab, setEmbeddedSwitchingTab] = useState('');
   const [supplierImportResult, setSupplierImportResult] = useState(null);
   const [ownerImportResult, setOwnerImportResult] = useState(null);
   const [inspectionInitialData, setInspectionInitialData] = useState({ sheetName: '', columns: [], rows: [], updatedAt: '' });
@@ -247,12 +249,19 @@ function App() {
     ? embeddedKcfxPageMap[activeTab]
     : null;
   const accessibleEmbeddedKcfxPages = EMBEDDED_KCFX_PAGES.filter((page) => canAccessTab(page.tab));
+  const activeEmbeddedKcfxFrameReady = activeEmbeddedKcfxPage
+    ? Boolean(embeddedFrameReady[activeEmbeddedKcfxPage.tab])
+    : false;
+  const activeEmbeddedKcfxLoading = Boolean(
+    activeEmbeddedKcfxPage && (!activeEmbeddedKcfxFrameReady || embeddedSwitchingTab === activeTab)
+  );
 
   function openMenuTab(tab, group) {
     setExpandedMenuGroups((current) => {
       if (current.has(group)) return current;
       return new Set([...current, group]);
     });
+    setEmbeddedSwitchingTab(embeddedKcfxPageMap[tab] ? tab : '');
     setActiveTab(tab);
   }
 
@@ -272,7 +281,34 @@ function App() {
     return expandedMenuGroups.has(group);
   }
 
-  function applyEmbeddedDashboardChrome(event) {
+  function markEmbeddedFrameReady(tab) {
+    setEmbeddedFrameReady((current) => {
+      if (current[tab]) return current;
+      return { ...current, [tab]: true };
+    });
+  }
+
+  function waitForEmbeddedFramePaint(iframe, tab, attempt = 0) {
+    window.setTimeout(() => {
+      try {
+        const documentRef = iframe.contentDocument;
+        const body = documentRef?.body;
+        const hasRenderedContent = Boolean(
+          body && (body.children.length > 0 || body.textContent.trim().length > 0)
+        );
+        const documentReady = documentRef?.readyState === 'interactive' || documentRef?.readyState === 'complete';
+        if ((documentReady && hasRenderedContent) || attempt >= 30) {
+          markEmbeddedFrameReady(tab);
+          return;
+        }
+        waitForEmbeddedFramePaint(iframe, tab, attempt + 1);
+      } catch {
+        markEmbeddedFrameReady(tab);
+      }
+    }, attempt === 0 ? 80 : 120);
+  }
+
+  function applyEmbeddedDashboardChrome(event, tab) {
     const iframe = event.currentTarget;
     try {
       iframe.contentDocument?.documentElement?.classList.add('embedded-host-root');
@@ -281,6 +317,7 @@ function App() {
       // The embedded dashboard is served from the same app; ignore if the browser blocks access.
     } finally {
       iframe.classList.add('is-ready');
+      waitForEmbeddedFramePaint(iframe, tab);
     }
   }
 
@@ -390,6 +427,20 @@ function App() {
       openFirstAllowedTab();
     }
   }, [activeTab, canAccessMaintenanceLibrary, canAccessQualityInspection, canAccessSalesInventory, canAccessSupplierPayment, canAccessSystemFileLibrary, canManagePermissions, user]);
+
+  useEffect(() => {
+    if (!activeEmbeddedKcfxPage) {
+      if (embeddedSwitchingTab) setEmbeddedSwitchingTab('');
+      return undefined;
+    }
+    if (!activeEmbeddedKcfxFrameReady || embeddedSwitchingTab !== activeTab) {
+      return undefined;
+    }
+    const timer = window.setTimeout(() => {
+      setEmbeddedSwitchingTab((current) => (current === activeTab ? '' : current));
+    }, 450);
+    return () => window.clearTimeout(timer);
+  }, [activeTab, activeEmbeddedKcfxFrameReady, activeEmbeddedKcfxPage, embeddedSwitchingTab]);
 
   useEffect(() => {
     function closeFilters() {
@@ -2253,18 +2304,38 @@ function App() {
             {activeEmbeddedKcfxPage && (
               <div className="embedded-dashboard-header">
                 <h2>{activeEmbeddedKcfxPage.label}</h2>
+                {activeEmbeddedKcfxLoading && (
+                  <span className="embedded-dashboard-status">正在加载页面内容</span>
+                )}
               </div>
             )}
             <div className="embedded-dashboard-frame-stack">
-              {accessibleEmbeddedKcfxPages.map((page) => (
-                <iframe
-                  key={page.tab}
-                  className={`embedded-dashboard-frame ${activeTab === page.tab ? 'is-active' : ''}`}
-                  title={page.label}
-                  src={embeddedKcfxSrc(page)}
-                  onLoad={applyEmbeddedDashboardChrome}
-                />
-              ))}
+              {accessibleEmbeddedKcfxPages.map((page) => {
+                const isActiveEmbeddedFrame = activeTab === page.tab;
+                const isEmbeddedFrameReady = Boolean(embeddedFrameReady[page.tab]);
+                return (
+                  <React.Fragment key={page.tab}>
+                    <iframe
+                      className={`embedded-dashboard-frame ${isActiveEmbeddedFrame ? 'is-active' : ''} ${isEmbeddedFrameReady ? 'is-ready' : ''}`}
+                      title={page.label}
+                      src={embeddedKcfxSrc(page)}
+                      data-tab={page.tab}
+                      onLoad={(event) => applyEmbeddedDashboardChrome(event, page.tab)}
+                    />
+                    {isActiveEmbeddedFrame && activeEmbeddedKcfxLoading && (
+                      <div className="embedded-dashboard-loading" role="status" aria-live="polite">
+                        <div className="embedded-dashboard-loading-card">
+                          <strong>{page.label}</strong>
+                          <span>正在打开页面并读取腾讯云数据</span>
+                          <div className="embedded-dashboard-loading-bar" aria-hidden="true">
+                            <span />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </React.Fragment>
+                );
+              })}
             </div>
           </section>
         )}

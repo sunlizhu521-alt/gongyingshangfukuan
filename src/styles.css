@@ -842,6 +842,19 @@ th {
   margin: 0;
 }
 
+.embedded-dashboard-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .embedded-dashboard-link {
   text-decoration: none;
 }
@@ -868,6 +881,63 @@ th {
   opacity: 1;
   pointer-events: auto;
   z-index: 1;
+}
+
+.embedded-dashboard-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  border: 1px solid #d7dee8;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.embedded-dashboard-loading-card {
+  width: min(420px, calc(100% - 32px));
+  display: grid;
+  gap: 10px;
+  padding: 18px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, .12);
+}
+
+.embedded-dashboard-loading-card strong {
+  color: #0f172a;
+  font-size: 18px;
+}
+
+.embedded-dashboard-loading-card span {
+  color: #475569;
+}
+
+.embedded-dashboard-loading-bar {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e2e8f0;
+}
+
+.embedded-dashboard-loading-bar span {
+  display: block;
+  width: 42%;
+  height: 100%;
+  border-radius: inherit;
+  background: #2563eb;
+  animation: embeddedLoadingSweep 1.1s ease-in-out infinite;
+}
+
+@keyframes embeddedLoadingSweep {
+  0% {
+    transform: translateX(-110%);
+  }
+
+  100% {
+    transform: translateX(250%);
+  }
 }
 
 .system-file-panel {
