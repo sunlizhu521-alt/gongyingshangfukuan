@@ -59,6 +59,8 @@ let departmentMatchDiagnostics = { matched: 0, unmatched: 0, sample: "" };
 let closedInventoryValue = 0;
 let summarySearchTimer = 0;
 let closedInventoryLoadPromise = null;
+let detailHeaderFilterTimer = 0;
+let detailHeaderFilterIdleId = 0;
 
 document.addEventListener("DOMContentLoaded", async () => {
   bindIfExists("#refreshBtn", "click", clearFilters);
@@ -420,7 +422,8 @@ function renderSummary() {
   renderQuantityCharts(filteredRows, selectedAgeLabels);
   renderUnclassifiedRows(filteredRows, selectedAgeLabels);
   detailTableBaseRows = filteredRows;
-  renderDetailTableHeaderFilters(filteredRows);
+  if (Object.keys(detailTableFilters).length) renderDetailTableHeaderFilters(filteredRows);
+  else scheduleDetailTableHeaderFilters(filteredRows);
   detailTableRows = applyDetailTableFilters(filteredRows);
   const shown = detailTableRows.slice(0, 1000);
   const summaryBody = $("#summaryRows");
@@ -458,6 +461,23 @@ function renderDetailTableHeaderFilters(rows) {
     `;
   });
   pruneDetailTableFilters(rows);
+}
+
+function scheduleDetailTableHeaderFilters(rows) {
+  window.clearTimeout(detailHeaderFilterTimer);
+  if (detailHeaderFilterIdleId && window.cancelIdleCallback) {
+    window.cancelIdleCallback(detailHeaderFilterIdleId);
+    detailHeaderFilterIdleId = 0;
+  }
+  const run = () => renderDetailTableHeaderFilters(rows);
+  if ("requestIdleCallback" in window) {
+    detailHeaderFilterIdleId = window.requestIdleCallback(() => {
+      detailHeaderFilterIdleId = 0;
+      run();
+    }, { timeout: 700 });
+  } else {
+    detailHeaderFilterTimer = window.setTimeout(run, 80);
+  }
 }
 
 function handleDetailTableFilterClick(event) {
@@ -597,18 +617,28 @@ function renderUnclassifiedRows(rows, selectedAgeLabels = []) {
 }
 
 function renderAmountCharts(rows, selectedAgeLabel = "") {
-  renderBars("warehouseTypeAmountChart", groupComputedSum(rows, "warehouseType", (row) => visibleAmount(row, selectedAgeLabel), 12), "warehouseTypeAmountTotal");
-  renderBars("departmentAmountChart", groupComputedSum(rows, "department", (row) => visibleAmount(row, selectedAgeLabel), 12), "departmentAmountTotal");
-  renderBars("ageAmountChart", groupAgeAmountSum(rows, selectedAgeLabel), "ageAmountTotal");
-  renderBars("productLineAmountChart", groupComputedSum(rows, "productLine", (row) => visibleAmount(row, selectedAgeLabel), 12), "productLineAmountTotal");
-  renderBars("warehouseLocationAmountChart", groupComputedSum(rows, "warehouseLocation", (row) => visibleAmount(row, selectedAgeLabel), 12), "warehouseLocationAmountTotal");
+  renderBarsIfExists("warehouseTypeAmountChart", () => groupComputedSum(rows, "warehouseType", (row) => visibleAmount(row, selectedAgeLabel), 12), "warehouseTypeAmountTotal");
+  renderBarsIfExists("departmentAmountChart", () => groupComputedSum(rows, "department", (row) => visibleAmount(row, selectedAgeLabel), 12), "departmentAmountTotal");
+  renderBarsIfExists("ageAmountChart", () => groupAgeAmountSum(rows, selectedAgeLabel), "ageAmountTotal");
+  renderBarsIfExists("productLineAmountChart", () => groupComputedSum(rows, "productLine", (row) => visibleAmount(row, selectedAgeLabel), 12), "productLineAmountTotal");
+  renderBarsIfExists("warehouseLocationAmountChart", () => groupComputedSum(rows, "warehouseLocation", (row) => visibleAmount(row, selectedAgeLabel), 12), "warehouseLocationAmountTotal");
 }
 
 function renderQuantityCharts(rows, selectedAgeLabel = "") {
-  renderQuantityBars("departmentQtyChart", groupComputedSum(rows, "department", (row) => visibleQuantity(row, selectedAgeLabel), 12), "departmentQtyTotal");
-  renderQuantityBars("ageQtyChart", groupAgeQuantitySum(rows, selectedAgeLabel), "ageQtyTotal");
-  renderQuantityBars("productLineQtyChart", groupComputedSum(rows, "productLine", (row) => visibleQuantity(row, selectedAgeLabel), 12), "productLineQtyTotal");
-  renderQuantityBars("warehouseLocationQtyChart", groupComputedSum(rows, "warehouseLocation", (row) => visibleQuantity(row, selectedAgeLabel), 12), "warehouseLocationQtyTotal");
+  renderQuantityBarsIfExists("departmentQtyChart", () => groupComputedSum(rows, "department", (row) => visibleQuantity(row, selectedAgeLabel), 12), "departmentQtyTotal");
+  renderQuantityBarsIfExists("ageQtyChart", () => groupAgeQuantitySum(rows, selectedAgeLabel), "ageQtyTotal");
+  renderQuantityBarsIfExists("productLineQtyChart", () => groupComputedSum(rows, "productLine", (row) => visibleQuantity(row, selectedAgeLabel), 12), "productLineQtyTotal");
+  renderQuantityBarsIfExists("warehouseLocationQtyChart", () => groupComputedSum(rows, "warehouseLocation", (row) => visibleQuantity(row, selectedAgeLabel), 12), "warehouseLocationQtyTotal");
+}
+
+function renderBarsIfExists(id, rowsFactory, totalId = "") {
+  if (!$(`#${id}`)) return;
+  renderBars(id, rowsFactory(), totalId);
+}
+
+function renderQuantityBarsIfExists(id, rowsFactory, totalId = "") {
+  if (!$(`#${id}`)) return;
+  renderQuantityBars(id, rowsFactory(), totalId);
 }
 
 function renderSummaryTables(rows, selectedAgeLabels = []) {
