@@ -28,11 +28,22 @@ async function initTrendDashboard() {
   document.querySelector("#clearTrendFiltersBtn")?.addEventListener("click", clearTrendFilters);
   document.addEventListener("click", closeTrendFilters);
   await renderTrendDashboardFromCache();
-  loadSharedLibrary({ statusEl, ids: [...TREND_MONTHS.map((month) => month.id), "dim-product", "dim-warehouse", "dim-warehouse-material"] })
-    .then(renderTrendDashboardFromCache)
-    .catch((error) => {
-      if (statusEl) statusEl.textContent = `腾讯云数据同步失败：${error?.message || error}`;
-    });
+  scheduleTrendServerSync(statusEl);
+}
+
+function scheduleTrendServerSync(statusEl) {
+  const sync = () => {
+    loadSharedLibrary({ statusEl, ids: [...TREND_MONTHS.map((month) => month.id), "dim-product", "dim-warehouse", "dim-warehouse-material"] })
+      .then(renderTrendDashboardFromCache)
+      .catch((error) => {
+        if (statusEl) statusEl.textContent = `腾讯云数据同步失败：${error?.message || error}`;
+      });
+  };
+  if ("requestIdleCallback" in window) {
+    window.requestIdleCallback(sync, { timeout: 3000 });
+  } else {
+    window.setTimeout(sync, 1200);
+  }
 }
 
 if (document.readyState === "loading") {

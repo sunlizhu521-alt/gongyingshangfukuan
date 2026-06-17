@@ -84,6 +84,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   });
   scheduleDeferredTrendLoad();
+  $("#summaryStatus").textContent = "正在读取本地缓存...";
+  await refreshSummary({ quietMissing: true });
   try {
     await loadSharedLibrary({
       statusEl: $("#summaryStatus"),
@@ -99,7 +101,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   await refreshSummary();
 });
 
-async function refreshSummary() {
+async function refreshSummary(options = {}) {
   const records = Object.fromEntries((await getActiveRecords()).map((record) => [record.id, record]));
   const inventoryRecord = records["fact-inventory"];
   const detailRecord = records["fact-2"];
@@ -109,7 +111,7 @@ async function refreshSummary() {
   renderSourcePanel(detailRecord, []);
   if (!detailRecord) {
     summaryRows = [];
-    $("#summaryStatus").textContent = "缺少库存分析月份表，请先到库存数据文件上传并应用。";
+    if (!options.quietMissing) $("#summaryStatus").textContent = "缺少库存分析月份表，请先到库存数据文件上传并应用。";
     populateFilters([]);
     renderSummary();
     scheduleDeferredTrendLoad();
@@ -1416,7 +1418,7 @@ function escapeHtml(value) {
 function scheduleDeferredTrendLoad() {
   if (window.__kcfxTrendScriptScheduled || !document.querySelector("#inventoryValueTrendChart")) return;
   window.__kcfxTrendScriptScheduled = true;
-  const load = () => loadScriptOnce("inventory-trend.js?v=20260617b");
+  const load = () => loadScriptOnce("inventory-trend.js?v=20260617c");
   if ("requestIdleCallback" in window) {
     window.requestIdleCallback(load, { timeout: 2500 });
   } else {
