@@ -2027,6 +2027,12 @@ function buildKcfxParseDiagnostics(parsed) {
   };
 }
 
+function defaultKcfxSheetHint(slotId) {
+  if (slotId === 'dim-purchase-division') return '产品线明细';
+  if (slotId === 'dim-product') return 'Dim-YL医疗器械商品分类';
+  return '';
+}
+
 function parseKcfxSlotPayload(slotId, payload) {
   let slot = {};
   try {
@@ -2039,7 +2045,7 @@ function parseKcfxSlotPayload(slotId, payload) {
     type: String(slot.type || ''),
     title: String(slot.title || slotId),
     expectedName: String(slot.expectedName || ''),
-    sheetHint: String(slot.sheetHint || (slotId === 'dim-purchase-division' ? '产品线明细' : '')),
+    sheetHint: String(slot.sheetHint || defaultKcfxSheetHint(slotId)),
     skipRows: Number.isInteger(Number(slot.skipRows)) ? Number(slot.skipRows) : undefined
   };
 }
