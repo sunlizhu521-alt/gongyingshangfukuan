@@ -547,6 +547,36 @@ function App() {
   }, [user]);
 
   useEffect(() => {
+    if (!user || activeTab !== 'inspectionNotice' || !canAccessTab('inspectionNotice')) return undefined;
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const inspectionLibraryIds = INSPECTION_LIBRARY_RECORD_IDS.join(',');
+        let records = {};
+        try {
+          const response = await fetch(`${API}/api/kcfx-library/preloaded?ids=${encodeURIComponent(inspectionLibraryIds)}`, { cache: 'no-store' });
+          if (response.ok) {
+            const payload = await response.json();
+            records = payload.records || {};
+          }
+        } catch {
+          records = {};
+        }
+        const hydratedRecords = await hydrateInspectionLibraryRecords(records);
+        if (!cancelled) setInspectionLibraryRecords(hydratedRecords);
+      } catch {
+        // Keep the existing dropdown data if a background refresh fails.
+      }
+    };
+    refresh();
+    window.addEventListener('focus', refresh);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('focus', refresh);
+    };
+  }, [activeTab, user]);
+
+  useEffect(() => {
     if (!user || accessibleEmbeddedKcfxPages.length === 0) return;
     const ids = [
       'sales-data',
