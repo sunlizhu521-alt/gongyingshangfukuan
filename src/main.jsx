@@ -34,6 +34,8 @@ const PURCHASE_DIVISION_SUPPLIER_COLUMN = 9;
 const PURCHASE_DIVISION_ADDRESS_COLUMN = 12;
 const PRODUCT_LINE_COLUMN = 7;
 const PRODUCT_SERIES_COLUMN = 8;
+const KCFX_INDEXED_DB_NAME = 'kcfx-inventory-analysis-file-library';
+const KCFX_INDEXED_DB_STORE = 'files';
 
 const SALES_INVENTORY_PAGES = [
   { tab: 'salesInventoryReceiptSummary', key: 'receiptSummary', label: '供应链库存分析', sourceFile: 'receipt-summary.html' },
@@ -104,6 +106,53 @@ function uniqueOptionValues(values) {
       seen.add(value);
       return true;
     });
+}
+
+function recordTime(record) {
+  return Math.max(
+    Date.parse(record?.savedAt || 0) || 0,
+    Number(record?.lastModified || 0) || 0,
+    Date.parse(record?.appliedAt || 0) || 0,
+    Date.parse(record?.sharedSavedAt || 0) || 0
+  );
+}
+
+function latestInspectionLibraryRecord(record) {
+  if (!record || record.deletedAt) return null;
+  const current = { ...record };
+  delete current.pending;
+  const pending = record.pending && !record.pending.deletedAt ? record.pending : null;
+  const latest = pending && recordTime(pending) >= recordTime(current) ? pending : current;
+  return Array.isArray(latest?.rows) && latest.rows.length ? latest : null;
+}
+
+function readInspectionIndexedDbRecord(id) {
+  if (!globalThis.indexedDB) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const request = indexedDB.open(KCFX_INDEXED_DB_NAME, 1);
+    request.onerror = () => resolve(null);
+    request.onupgradeneeded = () => {
+      request.transaction?.abort();
+      resolve(null);
+    };
+    request.onsuccess = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(KCFX_INDEXED_DB_STORE)) {
+        db.close();
+        resolve(null);
+        return;
+      }
+      const tx = db.transaction(KCFX_INDEXED_DB_STORE, 'readonly');
+      const storeRequest = tx.objectStore(KCFX_INDEXED_DB_STORE).get(id);
+      storeRequest.onsuccess = () => resolve(latestInspectionLibraryRecord(storeRequest.result));
+      storeRequest.onerror = () => resolve(null);
+      tx.oncomplete = () => db.close();
+      tx.onerror = () => {
+        db.close();
+        resolve(null);
+      };
+    };
+  });
 }
 
 function App() {
@@ -402,6 +451,14 @@ function App() {
       } catch {
         // Missing maintenance-library records leave the related dropdown empty until the file is uploaded.
       }
+    }));
+    const stillMissingIds = INSPECTION_LIBRARY_RECORD_IDS.filter((id) => {
+      const record = nextRecords[id];
+      return !Array.isArray(record?.rows) || record.rows.length === 0;
+    });
+    await Promise.all(stillMissingIds.map(async (id) => {
+      const localRecord = await readInspectionIndexedDbRecord(id);
+      if (localRecord) nextRecords[id] = localRecord;
     }));
     return nextRecords;
   }
@@ -847,8 +904,10 @@ function App() {
     return result;
   }, [inspectionPurchaseDivisionRows]);
   const inspectionSupplierShortNameOptions = useMemo(() => {
-    return uniqueValueOptions(inspectionPurchaseDivisionRows.map((row) => readPhysicalColumn(row, PURCHASE_DIVISION_SUPPLIER_COLUMN)));
-  }, [inspectionPurchaseDivisionRows]);
+    const purchaseDivisionOptions = inspectionPurchaseDivisionRows.map((row) => readPhysicalColumn(row, PURCHASE_DIVISION_SUPPLIER_COLUMN));
+    const supplierFallbackOptions = suppliers.map((supplier) => supplier.shortName || supplier.name);
+    return uniqueValueOptions([...purchaseDivisionOptions, ...supplierFallbackOptions]);
+  }, [inspectionPurchaseDivisionRows, suppliers]);
   const inspectionProductLineOptions = useMemo(() => {
     return uniqueValueOptions(inspectionProductRows.map((row) => readPhysicalColumn(row, PRODUCT_LINE_COLUMN)));
   }, [inspectionProductRows]);
