@@ -51,7 +51,7 @@ const MAINTENANCE_LIBRARY_PAGES = [
 ];
 
 const EMBEDDED_KCFX_PAGES = [...SALES_INVENTORY_PAGES, ...MAINTENANCE_LIBRARY_PAGES];
-const PRIORITY_KCFX_PRELOAD_TABS = new Set(['salesInventoryReceiptSummary', 'salesInventorySalesAnalysis']);
+const PRIORITY_KCFX_PRELOAD_TABS = new Set(['salesInventorySalesAnalysis']);
 
 const SYSTEM_FILE_LIBRARY_PAGES = [
   { tab: 'systemMigrationPackage', key: 'migrationPackage', label: '迁移备份包' },
@@ -422,11 +422,7 @@ function App() {
   }
 
   function embeddedKcfxSrc(page) {
-    return `/kcfx/${page.sourceFile}?embed=1&v=20260618e`;
-  }
-
-  function preloadKcfxSrc() {
-    return `/kcfx/preload.html?preload=1&v=20260616r`;
+    return `/kcfx/${page.sourceFile}?embed=1&v=20260618f`;
   }
 
   function assertApiResponse(label, response) {
@@ -580,7 +576,6 @@ function App() {
     if (!user || accessibleEmbeddedKcfxPages.length === 0) return;
     const ids = [
       'sales-data',
-      'fact-2',
       'dim-product',
       'dim-warehouse',
       'dim-warehouse-material',
@@ -588,6 +583,7 @@ function App() {
       'dim-customer-material'
     ].join(',');
     fetch(`${API}/api/kcfx-library/preloaded?ids=${encodeURIComponent(ids)}`, { cache: 'no-store' }).catch(() => {});
+    fetch(`${API}/api/kcfx-library/receipt-summary`, { cache: 'no-store' }).catch(() => {});
   }, [user, accessibleEmbeddedKcfxPages.length]);
 
   useEffect(() => {
@@ -600,13 +596,7 @@ function App() {
       if (activeEmbeddedKcfxPage) next.add(activeEmbeddedKcfxPage.tab);
       return next;
     });
-    const timer = window.setTimeout(() => {
-      setMountedKcfxTabs((current) => new Set([
-        ...current,
-        ...accessibleEmbeddedKcfxPages.map((page) => page.tab)
-      ]));
-    }, 8000);
-    return () => window.clearTimeout(timer);
+    return undefined;
   }, [user, accessibleEmbeddedKcfxPages.length, activeEmbeddedKcfxPage?.tab]);
 
   useEffect(() => {
@@ -2594,16 +2584,6 @@ function App() {
             <h2>{qualityInspectionPages[activeTab]}</h2>
             <p>当前页面已建立入口，具体业务内容待配置。</p>
           </section>
-        )}
-
-        {accessibleEmbeddedKcfxPages.length > 0 && (
-          <iframe
-            className="kcfx-data-preload-frame"
-            title="销售及库存数据预加载"
-            src={preloadKcfxSrc()}
-            aria-hidden="true"
-            tabIndex="-1"
-          />
         )}
 
         {accessibleEmbeddedKcfxPages.length > 0 && (

@@ -20,6 +20,7 @@ const kcfxFileDir = originalMaintenanceLibraryDir;
 const legacyKcfxFileDir = path.join(dataDir, 'kcfx-files');
 const kcfxRecordDir = path.join(dataDir, 'kcfx-records');
 const kcfxTrendSummaryPath = path.join(dataDir, 'kcfx-trend-summary.json');
+const kcfxReceiptSummaryPath = path.join(dataDir, 'kcfx-receipt-summary.json');
 const kcfxTrendWorkerPath = path.join(__dirname, 'kcfx-trend-summary-worker.js');
 const dbPath = path.join(dataDir, 'db.json');
 const kcfxDir = path.join(rootDir, 'public', 'kcfx');
@@ -138,7 +139,6 @@ const KC_LIBRARY_SLOT_IDS = new Set([
 ]);
 const KC_PRIORITY_PRELOAD_SLOT_IDS = new Set([
   'sales-data',
-  'fact-2',
   'dim-product',
   'dim-warehouse',
   'dim-warehouse-material',
@@ -1855,6 +1855,31 @@ const KCFX_TREND_UNCLASSIFIED_LIMIT = 1000;
 let kcfxTrendSummaryCache = null;
 let kcfxTrendSummaryPromise = null;
 
+const KCFX_RECEIPT_RECORD_IDS = new Set([
+  'fact-2',
+  'dim-product',
+  'dim-warehouse',
+  'dim-warehouse-material',
+  'fact-inventory'
+]);
+const KCFX_RECEIPT_AGE_BUCKETS = ['0-30天', '31-60天', '61-90天', '91-120天', '121-150天', '150天以上'];
+const KCFX_RECEIPT_AGE_DEFINITIONS = [
+  { label: '0-30天', candidates: ['0-30天数量', '0-30天库存数量', '0-30天结余库存数量', '0-30天库龄数量', '0-30天'] },
+  { label: '31-60天', candidates: ['31-60天数量', '31-60天库存数量', '31-60天结余库存数量', '31-60天库龄数量', '31-60天'] },
+  { label: '61-90天', candidates: ['61-90天数量', '61-90天库存数量', '61-90天结余库存数量', '61-90天库龄数量', '61-90天'] },
+  { label: '91-120天', candidates: ['91-120天数量', '91-120天库存数量', '91-120天结余库存数量', '91-120天库龄数量', '91-120天'] },
+  { label: '121-150天', candidates: ['121-150天数量', '121-150天库存数量', '121-150天结余库存数量', '121-150天库龄数量', '121-150数量', '121-150天', '121-150'] },
+  { label: '150天以上', candidates: ['>150天', '＞150天', '>150天数量', '＞150天数量', '>150天库存数量', '＞150天库存数量', '>150天结余库存数量', '＞150天结余库存数量', '大于150天', '大于150天数量', '150天以上数量', '150天以上库存数量', '150天以上结余库存数量', '150天以上库龄数量', '150天及以上数量', '150天及以上库存数量', '150以上数量', '150天以上', '150天及以上', '150以上'] }
+];
+const KCFX_RECEIPT_SALEABLE_NEW_WAREHOUSE_TYPES = new Set(['销售出库仓', '销售供应商仓', '生产成品仓']);
+const KCFX_RECEIPT_RAW_MATERIAL_WAREHOUSE_TYPES = new Set(['生产材料仓', '生成材料仓']);
+const KCFX_RECEIPT_OTHER_UNSALEABLE_WAREHOUSE_TYPES = new Set(['系统集成仓', '销售海上在途仓', '销售售后配件仓', '样品/展厅仓', '样品展厅仓']);
+const KCFX_RECEIPT_SALEABLE_RETURN_CATEGORIES = new Set(['二手商品-九大产品新', '二手商品-其他/成品', '全新换包装-九大产品线']);
+const KCFX_RECEIPT_UNINSPECTED_RETURN_CATEGORIES = new Set(['全新品', '其他/成品']);
+const KCFX_RECEIPT_OTHER_UNSALEABLE_RETURN_CATEGORIES = new Set(['健康办公', '其他/配件']);
+let kcfxReceiptSummaryCache = null;
+let kcfxReceiptSummaryPromise = null;
+
 function normalizeKcfxIds(idsParam) {
   const ids = String(idsParam || '')
     .split(',')
@@ -2105,6 +2130,416 @@ async function getKcfxTrendSummaryResponse() {
       error: error?.message || String(error)
     };
   }
+}
+
+async function getKcfxReceiptRecord(db, id) {
+  const source = db.kcfxLibrary?.records?.[id] || await recoverKcfxRecordFromRowsFile(id);
+  if (!source) return null;
+  const record = await ensureKcfxRecordRows(db, id, source);
+  return attachKcfxRecordRows(record);
+}
+
+function stripKcfxReceiptRecord(record = null) {
+  if (!record) return null;
+  return stripKcfxRecordRows(record);
+}
+
+async function readKcfxReceiptSummaryCache() {
+  if (kcfxReceiptSummaryCache?.ok) return kcfxReceiptSummaryCache;
+  try {
+    return await readKcfxReceiptSummaryCacheFromDisk();
+  } catch {
+    // Missing cache is expected before the first server-side summary build.
+  }
+  return null;
+}
+
+async function readKcfxReceiptSummaryCacheFromDisk() {
+  const payload = JSON.parse(await readFile(kcfxReceiptSummaryPath, 'utf8'));
+  if (payload?.ok && Array.isArray(payload.rows)) {
+    kcfxReceiptSummaryCache = payload;
+    return payload;
+  }
+  return null;
+}
+
+async function writeKcfxReceiptSummaryCache(payload) {
+  await mkdir(path.dirname(kcfxReceiptSummaryPath), { recursive: true });
+  await writeFile(kcfxReceiptSummaryPath, JSON.stringify(payload), 'utf8');
+  kcfxReceiptSummaryCache = payload;
+  return payload;
+}
+
+function isKcfxReceiptSummaryFresh(cache, db) {
+  if (!cache?.ok) return false;
+  if (!db?.kcfxLibrary?.savedAt) return true;
+  return cache.savedAt === db.kcfxLibrary.savedAt;
+}
+
+async function buildKcfxReceiptSummary(db = null) {
+  const database = db || await ensureDb();
+  await externalizeKcfxLibraryInlineRows(database);
+  const records = {};
+  for (const id of KCFX_RECEIPT_RECORD_IDS) {
+    records[id] = await getKcfxReceiptRecord(database, id);
+  }
+  const maps = buildKcfxReceiptDimensionMaps(records);
+  const diagnostics = { matched: 0, unmatched: 0, sample: '' };
+  const rows = (records['fact-2']?.rows || []).map((row) => buildKcfxReceiptSummaryRow(row, maps, diagnostics));
+  const closedInventory = summarizeKcfxClosedInventory(records['fact-inventory']);
+  return {
+    ok: true,
+    status: 'ready',
+    source: 'server-receipt-summary',
+    schemaVersion: database.kcfxLibrary?.schemaVersion || 1,
+    project: 'kcfx',
+    savedAt: database.kcfxLibrary?.savedAt || '',
+    generatedAt: new Date().toISOString(),
+    records: Object.fromEntries(Object.entries(records).map(([id, record]) => [id, stripKcfxReceiptRecord(record)])),
+    rows,
+    rowCount: rows.length,
+    diagnostics,
+    closedInventory
+  };
+}
+
+async function refreshKcfxReceiptSummaryCache(db = null) {
+  if (kcfxReceiptSummaryPromise) return kcfxReceiptSummaryPromise;
+  kcfxReceiptSummaryPromise = buildKcfxReceiptSummary(db)
+    .then((payload) => writeKcfxReceiptSummaryCache(payload))
+    .finally(() => {
+      kcfxReceiptSummaryPromise = null;
+    });
+  return kcfxReceiptSummaryPromise;
+}
+
+function scheduleKcfxReceiptSummaryRefresh(db = null) {
+  refreshKcfxReceiptSummaryCache(db).catch((error) => {
+    console.error('kcfx receipt summary refresh failed', error);
+  });
+}
+
+async function getKcfxReceiptSummaryResponse() {
+  const db = await ensureDb();
+  const cache = await readKcfxReceiptSummaryCache();
+  if (isKcfxReceiptSummaryFresh(cache, db)) return cache;
+  if (cache?.ok) {
+    scheduleKcfxReceiptSummaryRefresh(db);
+    return {
+      ...cache,
+      refreshing: true,
+      status: 'ready'
+    };
+  }
+  if (!kcfxReceiptSummaryPromise) scheduleKcfxReceiptSummaryRefresh(db);
+  if (kcfxReceiptSummaryPromise) {
+    const payload = await Promise.race([
+      kcfxReceiptSummaryPromise,
+      new Promise((resolve) => setTimeout(() => resolve(null), 12000))
+    ]);
+    if (payload?.ok) return payload;
+  }
+  return {
+    ok: false,
+    status: 'loading',
+    source: 'server-receipt-summary',
+    message: '库存分析汇总正在服务器生成中，请稍后刷新'
+  };
+}
+
+function buildKcfxReceiptDimensionMaps(records) {
+  return {
+    productMap: mapKcfxReceiptProductsByMaterialCode(records['dim-product']?.rows || []),
+    warehouseMap: mapKcfxReceiptWarehousesByName(records['dim-warehouse']?.rows || []),
+    warehouseMaterialMaps: mapKcfxReceiptWarehouseMaterialDimensions(records['dim-warehouse-material']?.rows || [])
+  };
+}
+
+function buildKcfxReceiptSummaryRow(row, { productMap, warehouseMap, warehouseMaterialMaps }, diagnostics) {
+  const materialCode = getKcfxReceiptDetailMaterialCode(row);
+  const warehouse = getKcfxReceiptDetailWarehouse(row);
+  const organization = getKcfxReceiptDetailOrganization(row);
+  const materialName = getKcfxReceiptDetailMaterialName(row);
+  const endingQty = getKcfxReceiptDetailEndingQty(row);
+  const inventoryDays = getKcfxReceiptDetailInventoryDays(row);
+  const product = productMap.get(materialCode) || {};
+  const settlementPrice = Number(product.settlementPrice) || 0;
+  const ageQuantities = getKcfxReceiptAgeQuantities(row);
+  const ageSettlementAmounts = Object.fromEntries(
+    Object.entries(ageQuantities).map(([label, qty]) => [label, qty * settlementPrice])
+  );
+  const warehouseInfo = warehouseMap.get(warehouse) || {};
+  const department = lookupKcfxReceiptDepartment(warehouseMaterialMaps, row) || getKcfxReceiptDetailDepartment(row);
+  recordKcfxReceiptDepartmentMatch(diagnostics, department, row);
+  const productCategory = product.productCategory || '';
+  const warehouseType = warehouseInfo.warehouseType || '';
+  return {
+    materialCode,
+    sku: product.sku || '',
+    materialName,
+    department,
+    productCategory,
+    productLine: product.productLine || '',
+    series: product.series || '',
+    warehouseType,
+    saleStatus: classifyKcfxReceiptSaleStatus(warehouseType, productCategory),
+    warehouseLocation: warehouseInfo.warehouseLocation || '',
+    warehouse,
+    organization,
+    inventoryDays,
+    pmcType: '',
+    pmcBasis: '',
+    pmcReason: '',
+    ageQuantities,
+    ageSettlementAmounts,
+    ageQuantityTotal: sumKcfxObjectValues(ageQuantities),
+    ageSettlementAmount: sumKcfxObjectValues(ageSettlementAmounts),
+    endingQty,
+    settlementPrice,
+    settlementAmount: endingQty * settlementPrice
+  };
+}
+
+function summarizeKcfxClosedInventory(record) {
+  const rows = record?.rows || [];
+  let qty = 0;
+  let value = 0;
+  for (const row of rows) {
+    const rowQty = kcfxReceiptFirstNumber([kcfxNthValue(row, 7)]);
+    const trueCost = kcfxReceiptFirstNumber([kcfxNthValue(row, 8)]);
+    qty += rowQty;
+    value += rowQty * trueCost;
+  }
+  return {
+    qty,
+    value,
+    rowCount: rows.length,
+    record: stripKcfxReceiptRecord(record)
+  };
+}
+
+function mapKcfxReceiptProductsByMaterialCode(rows) {
+  const map = new Map();
+  for (const row of rows) {
+    const materialCode = normalizeKcfxMaterialCode(kcfxReceiptFirstText([kcfxReceiptFirstValue(row, ['物料编码']), kcfxNthValue(row, 1)]));
+    if (!materialCode || map.has(materialCode)) continue;
+    map.set(materialCode, {
+      sku: kcfxReceiptFirstText([kcfxReceiptFirstValue(row, ['SKU', 'sku']), kcfxNthValue(row, 3)]),
+      productCategory: kcfxReceiptFirstText([kcfxReceiptFirstValue(row, ['销售产品分类', '产品分类', '销售产品类别', '产品类别', '品类'])]),
+      productLine: kcfxReceiptFirstText([kcfxReceiptFirstValue(row, ['销售产品线', '产品线']), kcfxNthValue(row, 7)]),
+      series: kcfxReceiptFirstText([kcfxReceiptFirstValue(row, ['销售系列', '系列']), kcfxNthValue(row, 8)]),
+      settlementPrice: kcfxReceiptFirstNumber([
+        kcfxReceiptFirstValue(row, ['结算价(含税)', '结算价（含税）', '结算价含税', '结算价', '内部结算价', '26年内部结算价', '2026年内部结算价']),
+        kcfxReceiptFirstValueByHeaderIncludes(row, ['结算价']),
+        kcfxNthValue(row, 9)
+      ])
+    });
+  }
+  return map;
+}
+
+function mapKcfxReceiptWarehousesByName(rows) {
+  const map = new Map();
+  for (const row of rows) {
+    const warehouse = normalizeKcfxText(kcfxNthValue(row, 2));
+    if (!warehouse || map.has(warehouse)) continue;
+    map.set(warehouse, {
+      warehouseType: normalizeKcfxText(kcfxReceiptFirstValue(row, ['一级仓库分类'])),
+      warehouseLocation: kcfxReceiptFirstText([kcfxReceiptFirstValue(row, ['二级仓库分类', '仓库位置', '位置']), kcfxNthValue(row, 8)])
+    });
+  }
+  return map;
+}
+
+function mapKcfxReceiptWarehouseMaterialDimensions(rows) {
+  const departmentByFactKey = new Map();
+  for (const row of rows) {
+    const factStyleKey = normalizeKcfxReceiptDepartmentKey(kcfxNthValue(row, 6));
+    const department = normalizeKcfxText(kcfxNthValue(row, 7) || kcfxReceiptFirstValue(row, ['事业部']));
+    if (factStyleKey && department && !departmentByFactKey.has(factStyleKey)) departmentByFactKey.set(factStyleKey, department);
+  }
+  return { departmentByFactKey };
+}
+
+function lookupKcfxReceiptDepartment(maps, row) {
+  for (const key of makeKcfxReceiptDepartmentLookupKeys(row)) {
+    const department = maps.departmentByFactKey.get(key);
+    if (department) return department;
+  }
+  return '';
+}
+
+function makeKcfxReceiptDepartmentLookupKeys(row) {
+  return [...new Set([
+    [kcfxNthValue(row, 4), kcfxNthValue(row, 3), kcfxNthValue(row, 1)].join(''),
+    [
+      kcfxReceiptFirstValue(row, ['库存组织', '使用组织', '组织']),
+      kcfxReceiptFirstValue(row, ['仓库名称', '仓库', '金蝶仓库', '库存仓库']),
+      kcfxReceiptFirstValue(row, ['物料编码', '货品编码', '商品编码', 'SKU'])
+    ].join(''),
+    [kcfxNthValue(row, 3), kcfxNthValue(row, 4), kcfxNthValue(row, 1)].join('')
+  ].map(normalizeKcfxReceiptDepartmentKey).filter(Boolean))];
+}
+
+function normalizeKcfxReceiptDepartmentKey(value) {
+  return normalizeKcfxMaterialCode(value).replace(/&/g, '').toLowerCase();
+}
+
+function recordKcfxReceiptDepartmentMatch(diagnostics, department, row) {
+  if (department) {
+    diagnostics.matched += 1;
+    return;
+  }
+  diagnostics.unmatched += 1;
+  if (!diagnostics.sample) {
+    diagnostics.sample = `D&C&A=${escapeKcfxReceiptStatusText([kcfxNthValue(row, 4), kcfxNthValue(row, 3), kcfxNthValue(row, 1)].join('&'))}`;
+  }
+}
+
+function escapeKcfxReceiptStatusText(value) {
+  const text = normalizeKcfxText(value);
+  return text.length > 24 ? `${text.slice(0, 24)}...` : text || '-';
+}
+
+function getKcfxReceiptDetailMaterialCode(row) {
+  return normalizeKcfxMaterialCode(kcfxNthValue(row, 1) || kcfxReceiptFirstValue(row, ['物料编码', '货品编码', '商品编码', 'SKU']));
+}
+
+function getKcfxReceiptDetailWarehouse(row) {
+  return normalizeKcfxText(kcfxReceiptFirstText([
+    kcfxNthValue(row, 3),
+    kcfxReceiptFirstValue(row, ['仓库', '仓库名称', '金蝶仓库', '库存仓库']),
+    kcfxReceiptFirstValueByHeaderIncludes(row, ['仓库'])
+  ]));
+}
+
+function getKcfxReceiptDetailOrganization(row) {
+  return normalizeKcfxText(kcfxReceiptFirstText([
+    kcfxNthValue(row, 4),
+    kcfxReceiptFirstValue(row, ['使用组织', '库存组织', '组织']),
+    kcfxReceiptFirstValueByHeaderIncludes(row, ['组织'])
+  ]));
+}
+
+function getKcfxReceiptDetailMaterialName(row) {
+  return normalizeKcfxText(kcfxReceiptFirstValue(row, ['物料名称', '货品名称', '商品名称', '金蝶名称']));
+}
+
+function getKcfxReceiptDetailEndingQty(row) {
+  return kcfxReceiptFirstNumber([
+    kcfxReceiptFirstValue(row, ['合计库存数量', '合计数量', '合计']),
+    kcfxReceiptFirstValueByHeaderIncludes(row, ['合计', '库存', '数量']),
+    kcfxReceiptFirstValueByHeaderIncludes(row, ['合计', '数量']),
+    kcfxReceiptFirstValue(row, ['0430结余库存数量', '4月30日结余库存数量', '结余库存数量']),
+    kcfxReceiptFirstValueByHeaderIncludes(row, ['0430', '结余', '库存', '数量']),
+    kcfxReceiptFirstValueByHeaderIncludes(row, ['结余', '库存', '数量'])
+  ]);
+}
+
+function getKcfxReceiptDetailInventoryDays(row) {
+  return kcfxReceiptFirstOptionalNumber([
+    kcfxReceiptFirstValue(row, ['库存天数', '库龄', '库龄天数', '在库天数', '库存周转天数']),
+    kcfxReceiptFirstValueByHeaderIncludes(row, ['库存', '天数']),
+    kcfxReceiptFirstValueByHeaderIncludes(row, ['库龄']),
+    kcfxReceiptFirstValueByHeaderIncludes(row, ['在库', '天数'])
+  ]);
+}
+
+function getKcfxReceiptDetailDepartment(row) {
+  return normalizeKcfxText(kcfxReceiptFirstText([
+    kcfxNthValue(row, 21),
+    kcfxReceiptFirstValue(row, ['事业部'])
+  ]));
+}
+
+function getKcfxReceiptAgeQuantities(row) {
+  return Object.fromEntries(KCFX_RECEIPT_AGE_DEFINITIONS.map((definition) => [
+    definition.label,
+    getKcfxReceiptAgeQuantity(row, definition)
+  ]));
+}
+
+function getKcfxReceiptAgeQuantity(row, definition) {
+  return kcfxReceiptFirstOptionalNumber([
+    ...definition.candidates.map((name) => kcfxReceiptFirstValue(row, [name])),
+    kcfxReceiptFirstValueByHeaderIncludes(row, [definition.label, '数量'])
+  ]) || 0;
+}
+
+function classifyKcfxReceiptSaleStatus(warehouseType, productCategory) {
+  const type = normalizeKcfxText(warehouseType);
+  const category = normalizeKcfxText(productCategory);
+  if (KCFX_RECEIPT_SALEABLE_NEW_WAREHOUSE_TYPES.has(type)) return '可售-全新品';
+  if (KCFX_RECEIPT_RAW_MATERIAL_WAREHOUSE_TYPES.has(type)) return '不可售-原材料';
+  if (KCFX_RECEIPT_OTHER_UNSALEABLE_WAREHOUSE_TYPES.has(type)) return '不可售-集成/在途/配件等';
+  if (type.includes('销售退货拆检仓')) {
+    if (KCFX_RECEIPT_SALEABLE_RETURN_CATEGORIES.has(category)) return '可售-已拆检';
+    if (KCFX_RECEIPT_UNINSPECTED_RETURN_CATEGORIES.has(category)) return '不可售-未拆检';
+    if (KCFX_RECEIPT_OTHER_UNSALEABLE_RETURN_CATEGORIES.has(category)) return '不可售-集成/在途/配件等';
+  }
+  return '';
+}
+
+function kcfxReceiptFirstText(candidates) {
+  for (const candidate of candidates) {
+    const text = normalizeKcfxText(candidate);
+    if (text) return text;
+  }
+  return '';
+}
+
+function kcfxReceiptFirstNumber(candidates) {
+  for (const candidate of candidates) {
+    const text = normalizeKcfxText(candidate);
+    const value = kcfxReceiptToNumber(candidate);
+    if (value !== 0 || text === '0') return value;
+  }
+  return 0;
+}
+
+function kcfxReceiptFirstOptionalNumber(candidates) {
+  for (const candidate of candidates) {
+    const text = normalizeKcfxText(candidate);
+    if (!text) continue;
+    const value = kcfxReceiptToNumber(candidate);
+    if (Number.isFinite(value)) return value;
+  }
+  return null;
+}
+
+function kcfxReceiptToNumber(value) {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  const text = normalizeKcfxText(value);
+  if (!text || text.startsWith('#')) return 0;
+  const parsed = Number(text.replace(/[,，\s￥¥元]/g, ''));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function kcfxReceiptFirstValue(row, names = []) {
+  for (const name of names) {
+    if (Object.prototype.hasOwnProperty.call(row || {}, name)) return row[name];
+  }
+  const normalizedNames = names.map(normalizeKcfxHeaderName);
+  for (const [key, value] of Object.entries(row || {})) {
+    if (key === '__cells') continue;
+    if (normalizedNames.includes(normalizeKcfxHeaderName(key))) return value;
+  }
+  return '';
+}
+
+function kcfxReceiptFirstValueByHeaderIncludes(row, requiredParts = []) {
+  const parts = requiredParts.map(normalizeKcfxHeaderName).filter(Boolean);
+  if (!parts.length) return '';
+  for (const [key, value] of Object.entries(row || {})) {
+    if (key === '__cells') continue;
+    const header = normalizeKcfxHeaderName(key);
+    if (parts.every((part) => header.includes(part))) return value;
+  }
+  return '';
+}
+
+function sumKcfxObjectValues(object) {
+  return Object.values(object || {}).reduce((total, value) => total + (Number(value) || 0), 0);
 }
 
 function summarizeKcfxTrendMonth(month, record, maps) {
@@ -2743,6 +3178,7 @@ async function parseKcfxStoredFile({ id, slot, file, storedFile, previousRecord,
     pushLog(db, 'kcfx file library parsed', requestUserName, `${requestUserName} uploaded and parsed ${record.title || id}`);
     await saveDb(db);
     scheduleKcfxPreloadRefresh(db);
+    scheduleKcfxReceiptSummaryRefresh(db);
     scheduleKcfxTrendSummaryRefresh();
   } catch (error) {
     db = await ensureDb();
@@ -2759,6 +3195,7 @@ async function parseKcfxStoredFile({ id, slot, file, storedFile, previousRecord,
     pushLog(db, 'kcfx file library parse failed', requestUserName, `${requestUserName} uploaded ${latestRecord.title || id}, background parse failed`);
     await saveDb(db);
     scheduleKcfxPreloadRefresh(db);
+    scheduleKcfxReceiptSummaryRefresh(db);
     scheduleKcfxTrendSummaryRefresh();
   }
 }
@@ -2804,6 +3241,20 @@ app.get('/api/kcfx-library/preloaded', async (req, res) => {
       ...kcfxPreloadCache,
       ok: false,
       status: 'failed',
+      error: error?.message || String(error)
+    });
+  }
+});
+
+app.get('/api/kcfx-library/receipt-summary', async (req, res) => {
+  try {
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(await getKcfxReceiptSummaryResponse());
+  } catch (error) {
+    res.status(500).json({
+      ok: false,
+      status: 'failed',
+      source: 'server-receipt-summary',
       error: error?.message || String(error)
     });
   }
@@ -2874,6 +3325,7 @@ app.post('/api/kcfx-library/records/:id/upload', upload.single('file'), async (r
       pushLog(db, 'kcfx file library uploaded', requestUser.name, `${requestUser.name} uploaded browser-parsed ${record.title || id}`);
       await saveDb(db);
       scheduleKcfxPreloadRefresh(db);
+      scheduleKcfxReceiptSummaryRefresh(db);
       scheduleKcfxTrendSummaryRefresh();
       return res.json({ ok: true, parsedOnClient: true, library: publicKcfxLibrary(db), record: db.kcfxLibrary.records[id] });
     }
@@ -2923,6 +3375,7 @@ app.put('/api/kcfx-library/records/:id', async (req, res) => {
   pushLog(db, '文件库更新', requestUser.name, `${requestUser.name} 更新销售及库存看板文件库：${record.title || id}`);
   await saveDb(db);
   scheduleKcfxPreloadRefresh(db);
+  scheduleKcfxReceiptSummaryRefresh(db);
   scheduleKcfxTrendSummaryRefresh();
   res.json({ ok: true, library: publicKcfxLibrary(db), record: db.kcfxLibrary.records[id] });
 });
@@ -2940,6 +3393,7 @@ app.delete('/api/kcfx-library/records/:id', async (req, res) => {
   pushLog(db, '文件库删除', requestUser.name, `${requestUser.name} 删除销售及库存看板文件库：${id}`);
   await saveDb(db);
   scheduleKcfxPreloadRefresh(db);
+  scheduleKcfxReceiptSummaryRefresh(db);
   scheduleKcfxTrendSummaryRefresh();
   res.status(204).end();
 });
@@ -2982,6 +3436,7 @@ const port = process.env.PORT || 4001;
 app.listen(port, async () => {
   const db = await ensureDb();
   scheduleKcfxPreloadRefresh(db);
+  scheduleKcfxReceiptSummaryRefresh(db);
   scheduleKcfxTrendSummaryRefresh();
   startWeeklyPaymentEmailScheduler();
   console.log(`API running at http://localhost:${port}`);

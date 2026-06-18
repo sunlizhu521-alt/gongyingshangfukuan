@@ -49,6 +49,8 @@ const LINKED_PRODUCT_FILTERS = [
 ];
 const RECEIPT_SUMMARY_REQUIRED_RECORD_IDS = ["fact-2", "dim-product", "dim-warehouse", "dim-warehouse-material"];
 const RECEIPT_SUMMARY_DEFERRED_RECORD_IDS = ["fact-inventory"];
+const RECEIPT_SUMMARY_API = `${KC_SERVER_LIBRARY_API}/receipt-summary`;
+const RECEIPT_SUMMARY_TIMEOUT_MS = 30000;
 const SUMMARY_BUILD_CHUNK_SIZE = 800;
 const SUMMARY_TABLE_RENDER_LIMIT = 100;
 const UNCLASSIFIED_TABLE_RENDER_LIMIT = 100;
@@ -88,6 +90,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   });
   scheduleDeferredTrendLoad();
+  $("#summaryStatus").textContent = "正在读取服务器库存汇总...";
+  if (await loadServerReceiptSummary()) return;
   $("#summaryStatus").textContent = "正在读取本地缓存...";
   await refreshSummary({ quietMissing: true });
   try {
@@ -104,6 +108,50 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
   await refreshSummary();
 });
+
+async function loadServerReceiptSummary() {
+  try {
+    let payload = null;
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      const response = await fetchKcfxApi(`${RECEIPT_SUMMARY_API}?v=${Date.now()}`, { cache: "no-store" }, RECEIPT_SUMMARY_TIMEOUT_MS);
+      if (!response.ok) throw new Error(`receipt-summary HTTP ${response.status}`);
+      payload = await response.json();
+      if (payload?.ok && payload.status === "ready" && Array.isArray(payload.rows)) {
+        applyServerReceiptSummary(payload);
+        return true;
+      }
+      if (payload?.status !== "loading") break;
+      $("#summaryStatus").textContent = payload.message || "服务器库存汇总生成中...";
+      await new Promise((resolve) => window.setTimeout(resolve, 1200));
+    }
+    throw new Error(payload?.error || payload?.message || "服务器库存汇总暂未就绪");
+  } catch (error) {
+    console.warn("server receipt summary failed, falling back to full library", error);
+    return false;
+  }
+}
+
+function applyServerReceiptSummary(payload) {
+  const records = payload.records || {};
+  const diagnostics = payload.diagnostics || {};
+  summaryRows = Array.isArray(payload.rows) ? payload.rows : [];
+  departmentMatchDiagnostics = {
+    matched: Number(diagnostics.matched || 0),
+    unmatched: Number(diagnostics.unmatched || 0),
+    sample: diagnostics.sample || ""
+  };
+  if (payload.closedInventory) {
+    closedInventoryValue = Number(payload.closedInventory.value || 0);
+    setText("#closedInventoryQtyTotal", formatNumberWithYi(payload.closedInventory.qty || 0, 2));
+    setText("#closedInventoryValueTotal", formatMoneyWithYi(closedInventoryValue));
+  }
+  populateFilters(summaryRows, records);
+  renderSourcePanel(records["fact-2"], summaryRows);
+  const diagnostic = departmentMatchDiagnostics.sample ? `，未匹配样例 ${departmentMatchDiagnostics.sample}` : "";
+  $("#summaryStatus").textContent = buildSummaryStatus(summaryRows.length, departmentMatchDiagnostics.matched, diagnostic, records);
+  renderSummary();
+  scheduleDeferredTrendLoad();
+}
 
 async function refreshSummary(options = {}) {
   const records = Object.fromEntries((await getActiveRecords()).map((record) => [record.id, record]));

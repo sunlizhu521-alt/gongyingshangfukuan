@@ -9,7 +9,6 @@ const KC_PRELOAD_STATE_KEY = "kcfx-auto-preload-state";
 const KC_PRELOAD_WAIT_MS = 12000;
 const KC_AUTO_PRELOAD_RECORD_IDS = [
   "sales-data",
-  "fact-2",
   "dim-product",
   "dim-warehouse",
   "dim-warehouse-material",
