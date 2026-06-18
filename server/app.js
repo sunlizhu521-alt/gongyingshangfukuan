@@ -18,6 +18,7 @@ const originalMaintenanceLibraryDir = path.join(dataDir, 'files', 'original', 'm
 const kcfxFileDir = originalMaintenanceLibraryDir;
 const legacyKcfxFileDir = path.join(dataDir, 'kcfx-files');
 const kcfxRecordDir = path.join(dataDir, 'kcfx-records');
+const kcfxTrendSummaryPath = path.join(dataDir, 'kcfx-trend-summary.json');
 const dbPath = path.join(dataDir, 'db.json');
 const kcfxDir = path.join(rootDir, 'public', 'kcfx');
 const serverStartedAt = new Date();
@@ -1849,6 +1850,8 @@ const KCFX_TREND_RECORD_IDS = new Set([
   'dim-warehouse-material'
 ]);
 const KCFX_TREND_UNCLASSIFIED_LIMIT = 1000;
+let kcfxTrendSummaryCache = null;
+let kcfxTrendSummaryPromise = null;
 
 function normalizeKcfxIds(idsParam) {
   const ids = String(idsParam || '')
@@ -1969,9 +1972,9 @@ function stripKcfxTrendRecord(record = null) {
 async function buildKcfxTrendSummary() {
   const db = await ensureDb();
   const records = {};
-  await Promise.all([...KCFX_TREND_RECORD_IDS].map(async (id) => {
+  for (const id of KCFX_TREND_RECORD_IDS) {
     records[id] = await getKcfxTrendRecord(db, id);
-  }));
+  }
   const maps = buildKcfxTrendDimensionMaps(records);
   const monthSummaries = KCFX_TREND_MONTHS.map((month) => summarizeKcfxTrendMonth(month, records[month.id], maps));
   return {
@@ -1983,6 +1986,81 @@ async function buildKcfxTrendSummary() {
     monthSummaries,
     records: Object.fromEntries(Object.entries(records).map(([id, record]) => [id, stripKcfxTrendRecord(record)]))
   };
+}
+
+async function readKcfxTrendSummaryCache() {
+  if (kcfxTrendSummaryCache?.ok) return kcfxTrendSummaryCache;
+  try {
+    const payload = JSON.parse(await readFile(kcfxTrendSummaryPath, 'utf8'));
+    if (payload?.ok && Array.isArray(payload.monthSummaries)) {
+      kcfxTrendSummaryCache = payload;
+      return payload;
+    }
+  } catch {
+    // Missing cache is expected before the first background build.
+  }
+  return null;
+}
+
+async function writeKcfxTrendSummaryCache(payload) {
+  await mkdir(path.dirname(kcfxTrendSummaryPath), { recursive: true });
+  await writeFile(kcfxTrendSummaryPath, JSON.stringify(payload), 'utf8');
+  kcfxTrendSummaryCache = payload;
+  return payload;
+}
+
+function isKcfxTrendSummaryFresh(cache, db) {
+  if (!cache?.ok) return false;
+  if (!db?.kcfxLibrary?.savedAt) return true;
+  return cache.savedAt === db.kcfxLibrary.savedAt;
+}
+
+async function refreshKcfxTrendSummaryCache() {
+  if (kcfxTrendSummaryPromise) return kcfxTrendSummaryPromise;
+  kcfxTrendSummaryPromise = buildKcfxTrendSummary()
+    .then((payload) => writeKcfxTrendSummaryCache(payload))
+    .finally(() => {
+      kcfxTrendSummaryPromise = null;
+    });
+  return kcfxTrendSummaryPromise;
+}
+
+function scheduleKcfxTrendSummaryRefresh() {
+  refreshKcfxTrendSummaryCache().catch((error) => {
+    console.error('kcfx trend summary refresh failed', error);
+  });
+}
+
+async function getKcfxTrendSummaryResponse() {
+  const db = await ensureDb();
+  const cache = await readKcfxTrendSummaryCache();
+  if (isKcfxTrendSummaryFresh(cache, db)) return cache;
+  scheduleKcfxTrendSummaryRefresh();
+  if (cache?.ok) {
+    return {
+      ...cache,
+      refreshing: true,
+      status: 'ready'
+    };
+  }
+  try {
+    return await Promise.race([
+      refreshKcfxTrendSummaryCache(),
+      new Promise((resolve) => setTimeout(() => resolve({
+        ok: false,
+        status: 'loading',
+        source: 'server-trend-summary',
+        message: '库存货值汇总正在服务器生成中，请稍后刷新'
+      }), 5000))
+    ]);
+  } catch (error) {
+    return {
+      ok: false,
+      status: 'failed',
+      source: 'server-trend-summary',
+      error: error?.message || String(error)
+    };
+  }
 }
 
 function summarizeKcfxTrendMonth(month, record, maps) {
@@ -2597,6 +2675,7 @@ async function parseKcfxStoredFile({ id, slot, file, storedFile, previousRecord,
     pushLog(db, 'kcfx file library parsed', requestUserName, `${requestUserName} uploaded and parsed ${record.title || id}`);
     await saveDb(db);
     scheduleKcfxPreloadRefresh(db);
+    scheduleKcfxTrendSummaryRefresh();
   } catch (error) {
     db = await ensureDb();
     const latestRecord = db.kcfxLibrary.records[id];
@@ -2612,6 +2691,7 @@ async function parseKcfxStoredFile({ id, slot, file, storedFile, previousRecord,
     pushLog(db, 'kcfx file library parse failed', requestUserName, `${requestUserName} uploaded ${latestRecord.title || id}, background parse failed`);
     await saveDb(db);
     scheduleKcfxPreloadRefresh(db);
+    scheduleKcfxTrendSummaryRefresh();
   }
 }
 
@@ -2646,7 +2726,7 @@ app.get('/api/kcfx-library/preloaded', async (req, res) => {
 app.get('/api/kcfx-library/trend-summary', async (req, res) => {
   try {
     res.setHeader('Cache-Control', 'no-store');
-    res.json(await buildKcfxTrendSummary());
+    res.json(await getKcfxTrendSummaryResponse());
   } catch (error) {
     res.status(500).json({
       ok: false,
@@ -2708,6 +2788,7 @@ app.post('/api/kcfx-library/records/:id/upload', upload.single('file'), async (r
       pushLog(db, 'kcfx file library uploaded', requestUser.name, `${requestUser.name} uploaded browser-parsed ${record.title || id}`);
       await saveDb(db);
       scheduleKcfxPreloadRefresh(db);
+      scheduleKcfxTrendSummaryRefresh();
       return res.json({ ok: true, parsedOnClient: true, library: publicKcfxLibrary(db), record: db.kcfxLibrary.records[id] });
     }
     const queuedRecord = buildQueuedKcfxFileRecord(req.file, storedFile, slot, previousRecord, requestUser.name);
@@ -2756,6 +2837,7 @@ app.put('/api/kcfx-library/records/:id', async (req, res) => {
   pushLog(db, '文件库更新', requestUser.name, `${requestUser.name} 更新销售及库存看板文件库：${record.title || id}`);
   await saveDb(db);
   scheduleKcfxPreloadRefresh(db);
+  scheduleKcfxTrendSummaryRefresh();
   res.json({ ok: true, library: publicKcfxLibrary(db), record: db.kcfxLibrary.records[id] });
 });
 
@@ -2772,6 +2854,7 @@ app.delete('/api/kcfx-library/records/:id', async (req, res) => {
   pushLog(db, '文件库删除', requestUser.name, `${requestUser.name} 删除销售及库存看板文件库：${id}`);
   await saveDb(db);
   scheduleKcfxPreloadRefresh(db);
+  scheduleKcfxTrendSummaryRefresh();
   res.status(204).end();
 });
 
@@ -2813,6 +2896,7 @@ const port = process.env.PORT || 4001;
 app.listen(port, async () => {
   const db = await ensureDb();
   scheduleKcfxPreloadRefresh(db);
+  scheduleKcfxTrendSummaryRefresh();
   startWeeklyPaymentEmailScheduler();
   console.log(`API running at http://localhost:${port}`);
 });

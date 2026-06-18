@@ -86,6 +86,15 @@ async function renderTrendDashboardFromCache() {
 
 async function renderTrendDashboardFromServerSummary() {
   const payload = await loadTrendServerSummary();
+  if (payload?.status === "loading") {
+    setTrendStatus(payload.message || "服务器正在生成库存货值汇总，稍后自动刷新...");
+    window.setTimeout(() => {
+      renderTrendDashboardFromServerSummary().catch((error) => {
+        console.warn("kcfx trend summary polling failed", error);
+      });
+    }, 5000);
+    return;
+  }
   if (!payload?.ok || !Array.isArray(payload.monthSummaries)) {
     throw new Error(payload?.error || "server trend summary not ready");
   }
