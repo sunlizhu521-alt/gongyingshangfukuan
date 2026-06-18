@@ -50,6 +50,8 @@ const LINKED_PRODUCT_FILTERS = [
 const RECEIPT_SUMMARY_REQUIRED_RECORD_IDS = ["fact-2", "dim-product", "dim-warehouse", "dim-warehouse-material"];
 const RECEIPT_SUMMARY_DEFERRED_RECORD_IDS = ["fact-inventory"];
 const SUMMARY_BUILD_CHUNK_SIZE = 800;
+const SUMMARY_TABLE_RENDER_LIMIT = 100;
+const UNCLASSIFIED_TABLE_RENDER_LIMIT = 100;
 let summaryRows = [];
 let filteredRows = [];
 let detailTableRows = [];
@@ -425,9 +427,12 @@ function renderSummary() {
   if (Object.keys(detailTableFilters).length) renderDetailTableHeaderFilters(filteredRows);
   else scheduleDetailTableHeaderFilters(filteredRows);
   detailTableRows = applyDetailTableFilters(filteredRows);
-  const shown = detailTableRows.slice(0, 1000);
+  const shown = detailTableRows.slice(0, SUMMARY_TABLE_RENDER_LIMIT);
   const summaryBody = $("#summaryRows");
-  if (summaryBody) summaryBody.innerHTML = shown.length ? shown.map((row) => `
+  const summaryMoreRow = detailTableRows.length > shown.length
+    ? `<tr><td colspan="7" class="empty">当前显示前 ${SUMMARY_TABLE_RENDER_LIMIT} 行，共 ${formatNumber(detailTableRows.length, 0)} 行；下载按钮会导出完整筛选结果。</td></tr>`
+    : "";
+  if (summaryBody) summaryBody.innerHTML = shown.length ? `${shown.map((row) => `
     <tr>
       <td>${escapeHtml(row.materialCode)}</td>
       <td>${escapeHtml(row.sku)}</td>
@@ -437,7 +442,7 @@ function renderSummary() {
       <td class="num">${formatNumber(row.settlementPrice, 6)}</td>
       <td class="num">${formatMoney(row.settlementAmount)}</td>
     </tr>
-  `).join("") : `<tr><td colspan="7" class="empty">暂无数据</td></tr>`;
+  `).join("")}${summaryMoreRow}` : `<tr><td colspan="7" class="empty">暂无数据</td></tr>`;
 }
 
 function updateValueGapMetric(visibleAmount = null) {
@@ -601,8 +606,12 @@ function detailTableFilterValue(row, key) {
 function renderUnclassifiedRows(rows, selectedAgeLabels = []) {
   const body = $("#unclassifiedRows");
   if (!body) return;
-  const dataRows = getUnclassifiedRows(rows).slice(0, 1000);
-  body.innerHTML = dataRows.length ? dataRows.map((row) => `
+  const allRows = getUnclassifiedRows(rows);
+  const dataRows = allRows.slice(0, UNCLASSIFIED_TABLE_RENDER_LIMIT);
+  const moreRow = allRows.length > dataRows.length
+    ? `<tr><td colspan="8" class="empty">当前显示前 ${UNCLASSIFIED_TABLE_RENDER_LIMIT} 行，共 ${formatNumber(allRows.length, 0)} 行；下载按钮会导出完整明细。</td></tr>`
+    : "";
+  body.innerHTML = dataRows.length ? `${dataRows.map((row) => `
     <tr>
       <td>${escapeHtml(getUnclassifiedReason(row))}</td>
       <td>${escapeHtml(row.materialCode)}</td>
@@ -613,7 +622,7 @@ function renderUnclassifiedRows(rows, selectedAgeLabels = []) {
       <td class="num">${formatNumber(visibleQuantity(row, selectedAgeLabels), 3)}</td>
       <td class="num">${formatMoney(visibleAmount(row, selectedAgeLabels))}</td>
     </tr>
-  `).join("") : `<tr><td colspan="8" class="empty">暂无未分类明细</td></tr>`;
+  `).join("")}${moreRow}` : `<tr><td colspan="8" class="empty">暂无未分类明细</td></tr>`;
 }
 
 function renderAmountCharts(rows, selectedAgeLabel = "") {
