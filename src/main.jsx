@@ -422,7 +422,7 @@ function App() {
   }
 
   function embeddedKcfxSrc(page) {
-    return `/kcfx/${page.sourceFile}?embed=1&v=20260618b`;
+    return `/kcfx/${page.sourceFile}?embed=1&v=20260618c`;
   }
 
   function preloadKcfxSrc() {
