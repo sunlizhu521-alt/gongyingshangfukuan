@@ -706,8 +706,15 @@ function App() {
   function extractProvinceCity(value) {
     const text = String(value || '').trim();
     if (!text) return '';
-    const provinceMatch = text.match(/([\u4e00-\u9fa5]{2,}(?:省|自治区|市))/);
-    const cityMatch = text.match(/([\u4e00-\u9fa5]{2,}(?:市|自治州|地区|盟))/);
+    const normalized = text.replace(/\s+/g, '');
+    const directAdminMatch = normalized.match(/^(北京市|天津市|上海市|重庆市)/);
+    if (directAdminMatch?.[1]) return directAdminMatch[1];
+
+    const provinceMatch = normalized.match(/([\u4e00-\u9fa5]{2,}(?:省|自治区|特别行政区))/);
+    const afterProvince = provinceMatch?.[1]
+      ? normalized.slice(normalized.indexOf(provinceMatch[1]) + provinceMatch[1].length)
+      : normalized;
+    const cityMatch = afterProvince.match(/([\u4e00-\u9fa5]{2,}(?:市|自治州|地区|盟))/);
     const parts = [];
     if (provinceMatch?.[1]) parts.push(provinceMatch[1]);
     if (cityMatch?.[1] && cityMatch[1] !== provinceMatch?.[1]) parts.push(cityMatch[1]);
@@ -716,17 +723,7 @@ function App() {
 
   function findSupplierAddressByShortName(shortName) {
     const textShortName = normalizeOptionText(shortName);
-    const addressFromPurchaseDivision = inspectionSupplierAddressByShortName.get(textShortName);
-    if (addressFromPurchaseDivision) return addressFromPurchaseDivision;
-    const normalizedShortName = normalizeSupplierName(textShortName);
-    if (!normalizedShortName) return '';
-    const supplier = suppliers.find((item) =>
-      normalizeSupplierName(item.shortName) === normalizedShortName ||
-      normalizeSupplierName(item.name) === normalizedShortName ||
-      normalizeSupplierName(item.name).includes(normalizedShortName)
-    );
-    if (!supplier) return '';
-    return extractProvinceCity(supplier.address || supplier.provinceCity || supplier.city || supplier.name);
+    return inspectionSupplierAddressByShortName.get(textShortName) || '';
   }
 
   function calculatePaymentDate(supplierName, issueDate) {
@@ -924,10 +921,11 @@ function App() {
     return result;
   }, [inspectionPurchaseDivisionRows]);
   const inspectionSupplierShortNameOptions = useMemo(() => {
-    const purchaseDivisionOptions = inspectionPurchaseDivisionRows.map((row) => readPhysicalColumn(row, PURCHASE_DIVISION_SUPPLIER_COLUMN));
-    const supplierFallbackOptions = suppliers.map((supplier) => supplier.shortName || supplier.name);
-    return uniqueValueOptions([...purchaseDivisionOptions, ...supplierFallbackOptions]);
-  }, [inspectionPurchaseDivisionRows, suppliers]);
+    return uniqueValueOptions(inspectionPurchaseDivisionRows.map((row) => readPhysicalColumn(row, PURCHASE_DIVISION_SUPPLIER_COLUMN)));
+  }, [inspectionPurchaseDivisionRows]);
+  const inspectionSupplierShortNameSet = useMemo(() => {
+    return new Set(inspectionSupplierShortNameOptions.map((option) => normalizeOptionText(option.value)));
+  }, [inspectionSupplierShortNameOptions]);
   const inspectionProductLineOptions = useMemo(() => {
     return uniqueValueOptions(inspectionProductRows.map((row) => readPhysicalColumn(row, PRODUCT_LINE_COLUMN)));
   }, [inspectionProductRows]);
@@ -950,6 +948,19 @@ function App() {
       return { ...row, supplierAddress: address };
     }));
   }, [inspectionSupplierAddressByShortName, user]);
+  useEffect(() => {
+    if (!user || inspectionSupplierShortNameSet.size === 0) return;
+    setInspectionNoticeRows((rows) => {
+      let changed = false;
+      const nextRows = rows.map((row) => {
+        const shortName = normalizeOptionText(row.supplierShortName);
+        if (!shortName || inspectionSupplierShortNameSet.has(shortName)) return row;
+        changed = true;
+        return { ...row, supplierShortName: '', supplierAddress: '' };
+      });
+      return changed ? nextRows : rows;
+    });
+  }, [inspectionSupplierShortNameSet, user]);
   const dimensionShortNameOptions = useMemo(() => {
     return uniqueValueOptions(suppliers.map((supplier) => supplier.shortName));
   }, [suppliers]);
@@ -2537,7 +2548,7 @@ function App() {
                         : field.key === 'series'
                           ? inspectionSeriesOptionsForProductLine(row.salesProductLine)
                           : (field.options || []).map((option) => ({ value: option, label: option }));
-                    const hasCurrentValue = row[field.key] && !baseOptions.some((option) => option.value === row[field.key]);
+                    const hasCurrentValue = field.key !== 'supplierShortName' && row[field.key] && !baseOptions.some((option) => option.value === row[field.key]);
                     const options = hasCurrentValue
                       ? [{ value: row[field.key], label: row[field.key] }, ...baseOptions]
                       : baseOptions;
