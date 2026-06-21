@@ -10,6 +10,7 @@ import { spawn } from 'node:child_process';
 import { mkdir, readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gzip } from 'node:zlib';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -36,6 +37,46 @@ const upload = multer({
 
 app.use(cors());
 app.use(express.json({ limit: '200mb' }));
+app.use(gzipJsonResponses);
+
+function gzipJsonResponses(req, res, next) {
+  const originalJson = res.json.bind(res);
+  res.json = (payload) => {
+    const acceptsGzip = /\bgzip\b/i.test(String(req.headers['accept-encoding'] || ''));
+    if (!acceptsGzip || res.getHeader('Content-Encoding')) {
+      return originalJson(payload);
+    }
+
+    let body = '';
+    try {
+      body = JSON.stringify(payload);
+    } catch {
+      return originalJson(payload);
+    }
+    if (Buffer.byteLength(body) < 2048) {
+      return originalJson(payload);
+    }
+
+    gzip(Buffer.from(body), (error, compressed) => {
+      if (error) {
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        res.setHeader('Content-Length', Buffer.byteLength(body));
+        res.end(body);
+        return;
+      }
+      const vary = String(res.getHeader('Vary') || '');
+      if (!vary.toLowerCase().split(',').map((item) => item.trim()).includes('accept-encoding')) {
+        res.setHeader('Vary', vary ? `${vary}, Accept-Encoding` : 'Accept-Encoding');
+      }
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.setHeader('Content-Encoding', 'gzip');
+      res.setHeader('Content-Length', compressed.length);
+      res.end(compressed);
+    });
+    return res;
+  };
+  next();
+}
 
 app.get('/api/health', (req, res) => {
   res.json({ ok: true, service: 'gongyingaixitong', time: new Date().toISOString() });
