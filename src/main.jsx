@@ -108,6 +108,13 @@ function uniqueOptionValues(values) {
     });
 }
 
+function fuzzyMatchOption(value, query) {
+  const normalizedValue = normalizeOptionText(value).toLowerCase();
+  const normalizedQuery = normalizeOptionText(query).toLowerCase();
+  if (!normalizedQuery) return true;
+  return normalizedValue.includes(normalizedQuery);
+}
+
 function recordTime(record) {
   return Math.max(
     Date.parse(record?.savedAt || 0) || 0,
@@ -1313,6 +1320,14 @@ function App() {
       }));
     if (!rowsToSubmit.length) {
       setMessage('请至少填写一条验货通知后再提交。');
+      return;
+    }
+    const invalidSupplierRows = rowsToSubmit.filter((row) => {
+      const shortName = normalizeOptionText(row.supplierShortName);
+      return shortName && !inspectionSupplierShortNameSet.has(shortName);
+    });
+    if (invalidSupplierRows.length) {
+      setMessage('供应商简称必须从采购分工明细的候选项中选择。');
       return;
     }
     const res = await fetch(`${API}/api/quality-inspection/notices`, {
@@ -2541,6 +2556,56 @@ function App() {
                     );
                   }
                   if (field.select) {
+                    if (field.key === 'supplierShortName') {
+                      const dropdownId = `inspection-supplier-${row.id}`;
+                      const isOpen = openFilter === dropdownId;
+                      const matchedOptions = inspectionSupplierShortNameOptions
+                        .filter((option) => fuzzyMatchOption(option.value, row.supplierShortName))
+                        .slice(0, 30);
+                      return (
+                        <div className="inspection-supplier-combobox" onClick={(event) => event.stopPropagation()}>
+                          <input
+                            className="table-input inspection-notice-input"
+                            value={row.supplierShortName || ''}
+                            placeholder="输入供应商"
+                            onFocus={() => setOpenFilter(dropdownId)}
+                            onClick={() => setOpenFilter(dropdownId)}
+                            onChange={(event) => {
+                              setOpenFilter(dropdownId);
+                              updateInspectionNoticeRow(row.id, field.key, event.target.value);
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter' && matchedOptions[0]) {
+                                event.preventDefault();
+                                updateInspectionNoticeRow(row.id, field.key, matchedOptions[0].value);
+                                setOpenFilter('');
+                              }
+                              if (event.key === 'Escape') setOpenFilter('');
+                            }}
+                          />
+                          {isOpen && (
+                            <div className="inspection-supplier-menu">
+                              {matchedOptions.length ? matchedOptions.map((option) => (
+                                <button
+                                  key={option.value}
+                                  type="button"
+                                  className="inspection-supplier-option"
+                                  onMouseDown={(event) => {
+                                    event.preventDefault();
+                                    updateInspectionNoticeRow(row.id, field.key, option.value);
+                                    setOpenFilter('');
+                                  }}
+                                >
+                                  {option.label}
+                                </button>
+                              )) : (
+                                <div className="inspection-supplier-empty">无匹配供应商</div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    }
                     const baseOptions = field.key === 'supplierShortName'
                       ? inspectionSupplierShortNameOptions
                       : field.key === 'salesProductLine'
