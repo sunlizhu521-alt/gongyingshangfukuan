@@ -100,7 +100,7 @@ async function renderTrendDashboardFromServerSummary() {
     throw new Error(payload?.error || "server trend summary not ready");
   }
   const monthSummaries = payload.monthSummaries.map((month) => ({
-    ...month,
+    ...normalizeTrendMonthSummary(month),
     items: Array.isArray(month.items) ? month.items : [],
     unclassifiedRows: Array.isArray(month.unclassifiedRows) ? month.unclassifiedRows : []
   }));
@@ -129,6 +129,11 @@ async function loadTrendServerSummary() {
 function renderTrendCharts() {
   renderVerticalTrendChart("inventoryValueTrendChart", "inventoryValueTrendTotal", currentTrendMonthSummaries, "", "", "", "value", "库存货值");
   renderVerticalTrendChart("inventoryQtyTrendChart", "inventoryQtyTrendTotal", currentTrendMonthSummaries, "", "", "", "qty", "库存数量维度");
+}
+
+function normalizeTrendMonthSummary(month) {
+  const definedMonth = TREND_MONTHS.find((item) => item.id === month?.id);
+  return definedMonth ? { ...month, label: definedMonth.label } : month;
 }
 
 function summarizeTrendMonth(month, record, maps) {
