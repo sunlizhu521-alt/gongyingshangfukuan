@@ -457,7 +457,7 @@ function renderVerticalTrendChart(chartId, totalId, monthSummaries, field, fallb
 
   const valuesByCategory = categoryNames.map((name) => ({
     name,
-    values: TREND_MONTHS.map((month) => getTrendMonthAggregateValue(monthSummaries, month.label, metric, selections))
+    values: TREND_MONTHS.map((month) => getTrendMonthAggregateValue(monthSummaries, month, metric, selections))
   }));
   const max = Math.max(...valuesByCategory.flatMap((item) => item.values), 1);
   const orderedMonths = TREND_MONTHS.map((month) => month.label).join("、");
@@ -518,8 +518,15 @@ function topTrendCategories(monthSummaries, field, fallbackName, limit = TREND_T
     .map(([name]) => name);
 }
 
-function getTrendMonthCategoryValue(monthSummaries, label, field, categoryName, fallbackName, metric = "qty", selections = {}, excludedFilterId = "") {
-  const month = monthSummaries.find((item) => item.label === label);
+function findTrendMonthSummary(monthSummaries, monthRef) {
+  if (monthRef && typeof monthRef === "object") {
+    return monthSummaries.find((item) => item.id === monthRef.id || item.label === monthRef.label);
+  }
+  return monthSummaries.find((item) => item.label === monthRef || item.id === monthRef);
+}
+
+function getTrendMonthCategoryValue(monthSummaries, monthRef, field, categoryName, fallbackName, metric = "qty", selections = {}, excludedFilterId = "") {
+  const month = findTrendMonthSummary(monthSummaries, monthRef);
   if (!month) return 0;
   return month.items.reduce((total, item) => {
     if (!trendItemMatchesSelections(item, selections, excludedFilterId)) return total;
@@ -528,8 +535,8 @@ function getTrendMonthCategoryValue(monthSummaries, label, field, categoryName, 
   }, 0);
 }
 
-function getTrendMonthAggregateValue(monthSummaries, label, metric = "qty", selections = {}, excludedFilterId = "") {
-  const month = monthSummaries.find((item) => item.label === label);
+function getTrendMonthAggregateValue(monthSummaries, monthRef, metric = "qty", selections = {}, excludedFilterId = "") {
+  const month = findTrendMonthSummary(monthSummaries, monthRef);
   if (!month) return 0;
   return month.items.reduce((total, item) => {
     return trendItemMatchesSelections(item, selections, excludedFilterId)
