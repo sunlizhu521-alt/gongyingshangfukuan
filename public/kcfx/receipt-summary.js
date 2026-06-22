@@ -377,10 +377,9 @@ function buildSourceReminder(rows) {
 }
 
 function populateFilters(rows, records = null) {
-  const warehouseMaterialRows = records?.["dim-warehouse-material"]?.rows || [];
   fillSelect($("#warehouseTypeFilter"), "库存全链路", uniqueValues(rows, "warehouseType"));
   populateLinkedProductFilters(rows);
-  fillSelect($("#departmentFilter"), "全部事业部", sortByPreferredOrder(uniquePhysicalColumnValues(warehouseMaterialRows, 7), DEPARTMENT_ORDER));
+  fillSelect($("#departmentFilter"), "全部事业部", sortByPreferredOrder(uniqueValues(rows, "department"), DEPARTMENT_ORDER));
   fillSelect($("#ageFilter"), "全部库龄", AGE_BUCKETS);
 }
 
