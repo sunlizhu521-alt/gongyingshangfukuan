@@ -1896,6 +1896,7 @@ const KCFX_RECEIPT_UNINSPECTED_RETURN_CATEGORIES = new Set(['全新品', '其他
 const KCFX_RECEIPT_OTHER_UNSALEABLE_RETURN_CATEGORIES = new Set(['健康办公', '其他/配件']);
 let kcfxReceiptSummaryCache = null;
 let kcfxReceiptSummaryPromise = null;
+const KCFX_RECEIPT_SUMMARY_CACHE_VERSION = 2;
 
 function normalizeKcfxIds(idsParam) {
   const ids = String(idsParam || '')
@@ -2189,6 +2190,7 @@ async function writeKcfxReceiptSummaryCache(payload) {
 
 function isKcfxReceiptSummaryFresh(cache, db) {
   if (!cache?.ok) return false;
+  if (cache.receiptSummaryVersion !== KCFX_RECEIPT_SUMMARY_CACHE_VERSION) return false;
   if (!db?.kcfxLibrary?.savedAt) return true;
   return cache.savedAt === db.kcfxLibrary.savedAt;
 }
@@ -2208,6 +2210,7 @@ async function buildKcfxReceiptSummary(db = null) {
     ok: true,
     status: 'ready',
     source: 'server-receipt-summary',
+    receiptSummaryVersion: KCFX_RECEIPT_SUMMARY_CACHE_VERSION,
     schemaVersion: database.kcfxLibrary?.schemaVersion || 1,
     project: 'kcfx',
     savedAt: database.kcfxLibrary?.savedAt || '',

@@ -58,6 +58,7 @@ let summaryRows = [];
 let filteredRows = [];
 let detailTableRows = [];
 let detailTableBaseRows = [];
+let detailTableAgeLabels = [];
 const detailTableFilters = {};
 let departmentMatchDiagnostics = { matched: 0, unmatched: 0, sample: "" };
 let closedInventoryValue = 0;
@@ -76,17 +77,15 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.addEventListener("click", closeMultiFilters);
   document.addEventListener("click", handleDetailTableFilterClick);
   document.addEventListener("input", handleDetailTableFilterSearch);
-  bindIfExists("#searchInput", "input", scheduleRenderSummary);
+  bindIfExists("#searchInput", "input", scheduleRenderSummaryFromMainFilters);
   LINKED_PRODUCT_FILTERS.forEach(({ id }) => {
     bindIfExists(`#${id}`, "change", () => {
-      populateLinkedProductFilters(summaryRows, id);
-      renderSummary();
+      renderFromMainFilters(id);
     });
   });
   ["warehouseTypeFilter", "departmentFilter", "ageFilter"].forEach((id) => {
     bindIfExists(`#${id}`, "change", () => {
-      populateLinkedProductFilters(summaryRows);
-      renderSummary();
+      renderFromMainFilters();
     });
   });
   scheduleDeferredTrendLoad();
@@ -449,6 +448,17 @@ function scheduleRenderSummary() {
   summarySearchTimer = window.setTimeout(renderSummary, 120);
 }
 
+function scheduleRenderSummaryFromMainFilters() {
+  clearDetailTableFilters();
+  scheduleRenderSummary();
+}
+
+function renderFromMainFilters(changedFilterId = "") {
+  clearDetailTableFilters();
+  populateLinkedProductFilters(summaryRows, changedFilterId);
+  renderSummary();
+}
+
 function renderSummary() {
   const selections = getSummaryFilterSelections();
   const selectedAgeLabels = selections.selectedAgeLabels;
@@ -474,9 +484,11 @@ function renderSummary() {
   renderQuantityCharts(filteredRows, selectedAgeLabels);
   renderUnclassifiedRows(filteredRows, selectedAgeLabels);
   detailTableBaseRows = filteredRows;
+  detailTableAgeLabels = selectedAgeLabels;
   if (Object.keys(detailTableFilters).length) renderDetailTableHeaderFilters(filteredRows);
   else scheduleDetailTableHeaderFilters(filteredRows);
   detailTableRows = applyDetailTableFilters(filteredRows);
+  updateDetailTableTotals(detailTableRows, selectedAgeLabels);
   const shown = detailTableRows.slice(0, SUMMARY_TABLE_RENDER_LIMIT);
   const summaryBody = $("#summaryRows");
   const summaryMoreRow = detailTableRows.length > shown.length
@@ -518,6 +530,14 @@ function renderDetailTableHeaderFilters(rows) {
     `;
   });
   pruneDetailTableFilters(rows);
+}
+
+function updateDetailTableTotals(rows, selectedAgeLabels = []) {
+  const el = $("#detailTableTotals");
+  if (!el) return;
+  const qty = sumVisibleQuantity(rows, selectedAgeLabels);
+  const amount = sumVisibleAmount(rows, selectedAgeLabels);
+  el.textContent = `库存数量合计：${formatSupplyChainQtyWithYi(qty)}｜库存金额合计：${formatMoneyWithYi(amount)}`;
 }
 
 function scheduleDetailTableHeaderFilters(rows) {
@@ -643,7 +663,7 @@ function uniqueDetailTableFilterValues(rows, key) {
 
 function detailTableFilterValue(row, key) {
   const empty = "(空白)";
-  const selectedAgeLabels = getSummaryFilterSelections().selectedAgeLabels;
+  const selectedAgeLabels = detailTableAgeLabels;
   const valueMap = {
     materialCode: row.materialCode,
     sku: row.sku,
