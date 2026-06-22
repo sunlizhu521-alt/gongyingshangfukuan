@@ -163,7 +163,7 @@ function readInspectionIndexedDbRecord(id) {
 }
 
 function App() {
-  const [activeTab, setActiveTab] = useState('ledger');
+  const [activeTab, setActiveTab] = useState('salesInventoryReceiptSummary');
   const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('invoiceUser') || 'null'));
   const [authMode, setAuthMode] = useState('login');
   const [loginName, setLoginName] = useState('');
@@ -190,7 +190,7 @@ function App() {
   const [paymentMonthFilter, setPaymentMonthFilter] = useState([]);
   const [oaSubmitWeekFilter, setOaSubmitWeekFilter] = useState([]);
   const [openFilter, setOpenFilter] = useState('');
-  const [expandedMenuGroups, setExpandedMenuGroups] = useState(() => new Set(['supplierPayment']));
+  const [expandedMenuGroups, setExpandedMenuGroups] = useState(() => new Set(['salesInventory']));
   const [embeddedFrameReady, setEmbeddedFrameReady] = useState({});
   const [embeddedSwitchingTab, setEmbeddedSwitchingTab] = useState('');
   const [embeddedLoadProgress, setEmbeddedLoadProgress] = useState({});
@@ -218,29 +218,8 @@ function App() {
   const systemOwnerName = '孙立柱';
   const permissionGroups = [
     {
-      value: 'supplierPayment',
-      label: '供应商付款提醒',
-      children: [
-        { value: 'supplierPayment.ledger', tab: 'ledger', label: '供应商付款看板' },
-        { value: 'supplierPayment.upload', tab: 'upload', label: '发票上传' }
-      ]
-    },
-    {
-      value: 'qualityInspection',
-      label: '品质验货',
-      children: [
-        { value: 'qualityInspection.inspectionNotice', tab: 'inspectionNotice', label: '验货通知' },
-        { value: 'qualityInspection.inspectionSchedule', tab: 'inspectionSchedule', label: '验货安排' },
-        { value: 'qualityInspection.inspectionReportUpload', tab: 'inspectionReportUpload', label: '检验报告单回传' },
-        { value: 'qualityInspection.inspectionFeedback', tab: 'inspectionFeedback', label: '验货反馈' },
-        { value: 'qualityInspection.inspectionReportQuery', tab: 'inspectionReportQuery', label: '检验报告单查询' },
-        { value: 'qualityInspection.inspectionSummary', tab: 'inspectionSummary', label: '验货信息汇总表' },
-        { value: 'qualityInspection.inspectionInitialData', tab: 'inspectionInitialData', label: '验货信息初始数据' }
-      ]
-    },
-    {
       value: 'salesInventory',
-      label: '销售及库存看板',
+      label: '库存和销售数据看板',
       children: SALES_INVENTORY_PAGES.map((page) => ({
         value: `salesInventory.${page.key}`,
         tab: page.tab,
@@ -281,15 +260,6 @@ function App() {
     permissionGroups.flatMap((group) => group.children.map((item) => [item.tab, item.value]))
   );
   const legacyPermissionMap = {
-    'supplierPayment.ledger': ['supplierPayment'],
-    'supplierPayment.upload': ['supplierPayment'],
-    'qualityInspection.inspectionNotice': ['qualityInspection'],
-    'qualityInspection.inspectionSchedule': ['qualityInspection'],
-    'qualityInspection.inspectionReportUpload': ['qualityInspection'],
-    'qualityInspection.inspectionFeedback': ['qualityInspection'],
-    'qualityInspection.inspectionReportQuery': ['qualityInspection'],
-    'qualityInspection.inspectionSummary': ['qualityInspection'],
-    'qualityInspection.inspectionInitialData': ['qualityInspection'],
     ...Object.fromEntries(SALES_INVENTORY_PAGES.map((page) => [`salesInventory.${page.key}`, ['salesInventory']])),
     'maintenanceLibrary.factLibrary': ['maintenanceLibrary', 'salesInventory', 'salesInventory.factLibrary'],
     'maintenanceLibrary.salesLibrary': ['maintenanceLibrary', 'salesInventory', 'salesInventory.salesLibrary'],
@@ -321,20 +291,9 @@ function App() {
   const canManagePermissions = user?.name === systemOwnerName;
   const canManageSystemFiles = user?.name === systemOwnerName;
   const canManageMaintenanceLibrary = user?.name === systemOwnerName;
-  const canAccessSupplierPayment = canAccessGroup('supplierPayment');
-  const canAccessQualityInspection = canAccessGroup('qualityInspection');
   const canAccessSalesInventory = canAccessGroup('salesInventory');
   const canAccessMaintenanceLibrary = canManageMaintenanceLibrary;
   const canAccessSystemFileLibrary = canAccessGroup('systemFileLibrary');
-  const qualityInspectionPages = {
-    inspectionNotice: '验货通知',
-    inspectionSchedule: '验货安排',
-    inspectionReportUpload: '检验报告单回传',
-    inspectionFeedback: '验货反馈',
-    inspectionReportQuery: '检验报告单查询',
-    inspectionSummary: '验货信息汇总表',
-    inspectionInitialData: '验货信息初始数据'
-  };
   const embeddedKcfxPageMap = Object.fromEntries(EMBEDDED_KCFX_PAGES.map((page) => [page.tab, page]));
   const activeEmbeddedKcfxPage = embeddedKcfxPageMap[activeTab] && canAccessTab(activeTab)
     ? embeddedKcfxPageMap[activeTab]
@@ -644,7 +603,7 @@ function App() {
     if (user && !canManagePermissions && activeTab === 'permissionManagement') {
       openFirstAllowedTab();
     }
-  }, [activeTab, canAccessMaintenanceLibrary, canAccessQualityInspection, canAccessSalesInventory, canAccessSupplierPayment, canAccessSystemFileLibrary, canManagePermissions, user]);
+  }, [activeTab, canAccessMaintenanceLibrary, canAccessSalesInventory, canAccessSystemFileLibrary, canManagePermissions, user]);
 
   useEffect(() => {
     if (!activeEmbeddedKcfxPage) {
@@ -838,7 +797,7 @@ function App() {
     const content = String(row.content || '');
     const text = `${type} ${content}`;
     if (text.includes('验货通知')) {
-      return { secondPage: '品质验货', thirdPage: '验货通知' };
+      return { secondPage: '历史业务', thirdPage: '验货通知' };
     }
     if (text.includes('发票库存删除')) {
       return { secondPage: '系统文件库', thirdPage: '发票信息库存查看' };
@@ -847,10 +806,10 @@ function App() {
       return { secondPage: '维护文件库', thirdPage: '供应商管理维度表' };
     }
     if (text.includes('OCR') || text.includes('已上传') || text.includes('上传')) {
-      return { secondPage: '供应商付款提醒', thirdPage: '发票上传' };
+      return { secondPage: '历史业务', thirdPage: '发票上传' };
     }
     if (text.includes('付款') || text.includes('OA') || text.includes('状态更新') || text.includes('定时邮件')) {
-      return { secondPage: '供应商付款提醒', thirdPage: '供应商付款看板' };
+      return { secondPage: '历史业务', thirdPage: '供应商付款看板' };
     }
     return { secondPage: '未分类', thirdPage: '未分类' };
   }
@@ -1616,7 +1575,7 @@ function App() {
       <main className="login-shell">
         {authMode === 'login' ? (
           <form className="login-panel" onSubmit={login}>
-            <h1>供应链AI系统</h1>
+            <h1>库存和销售数据看板</h1>
             <label>
               姓名
               <input
@@ -1702,70 +1661,9 @@ function App() {
   return (
     <main className="app-shell">
       <aside className="sidebar">
-        <h1>供应链AI系统</h1>
+        <h1>库存和销售数据看板</h1>
         <div className="app-version-time">版本时间：{appVersionTime}</div>
         <nav className="sidebar-menu" aria-label="系统菜单">
-          {canAccessSupplierPayment && (
-          <div className="menu-group">
-              <button
-                type="button"
-                className={`menu-group-toggle ${isMenuGroupExpanded('supplierPayment') ? 'active' : ''}`}
-                onClick={() => toggleMenuGroup('supplierPayment')}
-                aria-expanded={isMenuGroupExpanded('supplierPayment')}
-              >
-                供应商付款提醒
-                <span>{isMenuGroupExpanded('supplierPayment') ? '▾' : '▸'}</span>
-              </button>
-              {isMenuGroupExpanded('supplierPayment') && (
-              <div className="submenu-list">
-                {canAccessTab('ledger') && (
-                  <button className={activeTab === 'ledger' ? 'active' : ''} onClick={() => openMenuTab('ledger', 'supplierPayment')}>供应商付款看板</button>
-                )}
-                {canAccessTab('upload') && (
-                  <button className={activeTab === 'upload' ? 'active' : ''} onClick={() => openMenuTab('upload', 'supplierPayment')}>发票上传</button>
-                )}
-              </div>
-            )}
-          </div>
-          )}
-          {canAccessQualityInspection && (
-          <div className="menu-group">
-              <button
-                type="button"
-                className={`menu-group-toggle ${isMenuGroupExpanded('qualityInspection') ? 'active' : ''}`}
-                onClick={() => toggleMenuGroup('qualityInspection')}
-                aria-expanded={isMenuGroupExpanded('qualityInspection')}
-              >
-                品质验货
-                <span>{isMenuGroupExpanded('qualityInspection') ? '▾' : '▸'}</span>
-              </button>
-              {isMenuGroupExpanded('qualityInspection') && (
-              <div className="submenu-list">
-                {canAccessTab('inspectionNotice') && (
-                  <button className={activeTab === 'inspectionNotice' ? 'active' : ''} onClick={() => openMenuTab('inspectionNotice', 'qualityInspection')}>验货通知</button>
-                )}
-                {canAccessTab('inspectionSchedule') && (
-                  <button className={activeTab === 'inspectionSchedule' ? 'active' : ''} onClick={() => openMenuTab('inspectionSchedule', 'qualityInspection')}>验货安排</button>
-                )}
-                {canAccessTab('inspectionReportUpload') && (
-                  <button className={activeTab === 'inspectionReportUpload' ? 'active' : ''} onClick={() => openMenuTab('inspectionReportUpload', 'qualityInspection')}>检验报告单回传</button>
-                )}
-                {canAccessTab('inspectionFeedback') && (
-                  <button className={activeTab === 'inspectionFeedback' ? 'active' : ''} onClick={() => openMenuTab('inspectionFeedback', 'qualityInspection')}>验货反馈</button>
-                )}
-                {canAccessTab('inspectionReportQuery') && (
-                  <button className={activeTab === 'inspectionReportQuery' ? 'active' : ''} onClick={() => openMenuTab('inspectionReportQuery', 'qualityInspection')}>检验报告单查询</button>
-                )}
-                {canAccessTab('inspectionSummary') && (
-                  <button className={activeTab === 'inspectionSummary' ? 'active' : ''} onClick={() => openMenuTab('inspectionSummary', 'qualityInspection')}>验货信息汇总表</button>
-                )}
-                {canAccessTab('inspectionInitialData') && (
-                  <button className={activeTab === 'inspectionInitialData' ? 'active' : ''} onClick={() => openMenuTab('inspectionInitialData', 'qualityInspection')}>验货信息初始数据</button>
-                )}
-              </div>
-            )}
-          </div>
-          )}
           {canAccessSalesInventory && (
           <div className="menu-group">
               <button
@@ -1774,7 +1672,7 @@ function App() {
                 onClick={() => toggleMenuGroup('salesInventory')}
                 aria-expanded={isMenuGroupExpanded('salesInventory')}
               >
-                销售及库存看板
+                库存和销售数据看板
                 <span>{isMenuGroupExpanded('salesInventory') ? '▾' : '▸'}</span>
               </button>
               {isMenuGroupExpanded('salesInventory') && (
@@ -2653,13 +2551,6 @@ function App() {
               ]}
             />
           </>
-        )}
-
-        {qualityInspectionPages[activeTab] && !['inspectionInitialData', 'inspectionNotice'].includes(activeTab) && canAccessTab(activeTab) && (
-          <section className="placeholder-panel">
-            <h2>{qualityInspectionPages[activeTab]}</h2>
-            <p>当前页面已建立入口，具体业务内容待配置。</p>
-          </section>
         )}
 
         {accessibleEmbeddedKcfxPages.length > 0 && (

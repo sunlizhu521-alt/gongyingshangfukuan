@@ -188,25 +188,6 @@ const KC_PRIORITY_PRELOAD_SLOT_IDS = new Set([
 ]);
 const PERMISSION_GROUPS = [
   {
-    value: 'supplierPayment',
-    children: [
-      'supplierPayment.ledger',
-      'supplierPayment.upload'
-    ]
-  },
-  {
-    value: 'qualityInspection',
-    children: [
-      'qualityInspection.inspectionNotice',
-      'qualityInspection.inspectionSchedule',
-      'qualityInspection.inspectionReportUpload',
-      'qualityInspection.inspectionFeedback',
-      'qualityInspection.inspectionReportQuery',
-      'qualityInspection.inspectionSummary',
-      'qualityInspection.inspectionInitialData'
-    ]
-  },
-  {
     value: 'salesInventory',
     children: SALES_INVENTORY_PERMISSIONS
   },
@@ -228,14 +209,9 @@ const OWNER_PERMISSIONS = [...PERMISSION_KEYS];
 const DEFAULT_PERMISSIONS = [];
 
 function expandPermissionKey(permission) {
-  if (permission === 'supplierPayment') return ['supplierPayment', 'supplierPayment.ledger', 'supplierPayment.upload'];
   if (permission === 'supplierPayment.invoiceInventory' || permission === 'invoiceInventory') return ['systemFileLibrary', 'systemFileLibrary.invoiceInventory'];
   if (permission === 'supplierPayment.supplierManagement' || permission === 'supplierManagement') return ['maintenanceLibrary', 'maintenanceLibrary.supplierManagement'];
   if (permission === 'supplierPayment.reminders') return ['systemManagement', 'systemManagement.reminders'];
-  if (permission === 'qualityInspection') {
-    const group = PERMISSION_GROUPS.find((item) => item.value === 'qualityInspection');
-    return [group.value, ...group.children];
-  }
   if (permission === 'salesInventory') return ['salesInventory', ...SALES_INVENTORY_PERMISSIONS];
   if (permission === 'maintenanceLibrary') return ['maintenanceLibrary', ...MAINTENANCE_LIBRARY_PERMISSIONS];
   if (permission === 'salesInventory.factLibrary') return ['maintenanceLibrary', 'maintenanceLibrary.factLibrary'];
