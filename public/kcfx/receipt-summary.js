@@ -66,6 +66,10 @@ let summarySearchTimer = 0;
 let closedInventoryLoadPromise = null;
 let detailHeaderFilterTimer = 0;
 let detailHeaderFilterIdleId = 0;
+let detailTableRenderTimer = 0;
+let detailTableRenderIdleId = 0;
+let detailTableRenderObserver = null;
+let detailTableRenderToken = 0;
 
 document.addEventListener("DOMContentLoaded", async () => {
   bindIfExists("#refreshBtn", "click", clearFilters);
@@ -88,7 +92,6 @@ document.addEventListener("DOMContentLoaded", async () => {
       renderFromMainFilters();
     });
   });
-  scheduleDeferredTrendLoad();
   $("#summaryStatus").textContent = "正在读取服务器库存汇总...";
   if (await loadServerReceiptSummary()) return;
   $("#summaryStatus").textContent = "正在读取本地缓存...";
@@ -484,10 +487,61 @@ function renderSummary() {
   renderUnclassifiedRows(filteredRows, selectedAgeLabels);
   detailTableBaseRows = filteredRows;
   detailTableAgeLabels = selectedAgeLabels;
-  if (Object.keys(detailTableFilters).length) renderDetailTableHeaderFilters(filteredRows);
-  else scheduleDetailTableHeaderFilters(filteredRows);
   detailTableRows = applyDetailTableFilters(filteredRows);
   updateDetailTableTotals(detailTableRows, selectedAgeLabels);
+  scheduleDetailTableRender();
+}
+
+function renderDetailTablePlaceholder() {
+  const summaryBody = $("#summaryRows");
+  if (!summaryBody) return;
+  summaryBody.innerHTML = `<tr><td colspan="9" class="empty">明细正在准备...</td></tr>`;
+}
+
+function scheduleDetailTableRender() {
+  detailTableRenderToken += 1;
+  const token = detailTableRenderToken;
+  renderDetailTablePlaceholder();
+
+  window.clearTimeout(detailTableRenderTimer);
+  if (detailTableRenderIdleId && window.cancelIdleCallback) {
+    window.cancelIdleCallback(detailTableRenderIdleId);
+    detailTableRenderIdleId = 0;
+  }
+  if (detailTableRenderObserver) {
+    detailTableRenderObserver.disconnect();
+    detailTableRenderObserver = null;
+  }
+
+  const run = () => {
+    if (token !== detailTableRenderToken) return;
+    if (detailTableRenderObserver) {
+      detailTableRenderObserver.disconnect();
+      detailTableRenderObserver = null;
+    }
+    renderDetailTable();
+  };
+
+  const table = $("#inventoryMonthTable");
+  if (table && "IntersectionObserver" in window) {
+    detailTableRenderObserver = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) run();
+    }, { rootMargin: "600px 0px" });
+    detailTableRenderObserver.observe(table);
+  }
+
+  if ("requestIdleCallback" in window) {
+    detailTableRenderIdleId = window.requestIdleCallback(() => {
+      detailTableRenderIdleId = 0;
+      run();
+    }, { timeout: 1800 });
+  } else {
+    detailTableRenderTimer = window.setTimeout(run, 800);
+  }
+}
+
+function renderDetailTable() {
+  renderDetailTableHeaderFilters(detailTableBaseRows);
   const shown = detailTableRows.slice(0, SUMMARY_TABLE_RENDER_LIMIT);
   const summaryBody = $("#summaryRows");
   const summaryMoreRow = detailTableRows.length > shown.length
@@ -502,8 +556,8 @@ function renderSummary() {
       <td class="num">${formatNumber(row.endingQty, 3)}</td>
       <td class="num">${formatNumber(row.settlementPrice, 6)}</td>
       <td class="num">${formatMoney(row.settlementAmount)}</td>
-      <td class="num">${formatNumber(visibleQuantity(row, selectedAgeLabels), 3)}</td>
-      <td class="num">${formatMoney(visibleAmount(row, selectedAgeLabels))}</td>
+      <td class="num">${formatNumber(visibleQuantity(row, detailTableAgeLabels), 3)}</td>
+      <td class="num">${formatMoney(visibleAmount(row, detailTableAgeLabels))}</td>
     </tr>
   `).join("")}${summaryMoreRow}` : `<tr><td colspan="9" class="empty">暂无数据</td></tr>`;
 }
@@ -1535,11 +1589,10 @@ function scheduleDeferredTrendLoad() {
   if (window.__kcfxTrendScriptScheduled || !document.querySelector("#inventoryValueTrendChart")) return;
   window.__kcfxTrendScriptScheduled = true;
   const load = () => loadScriptOnce("inventory-trend.js?v=20260622d");
-  if ("requestIdleCallback" in window) {
-    window.requestIdleCallback(load, { timeout: 2500 });
-  } else {
-    window.setTimeout(load, 500);
-  }
+  window.setTimeout(() => {
+    if ("requestIdleCallback" in window) window.requestIdleCallback(load, { timeout: 4000 });
+    else load();
+  }, 8000);
 }
 
 function loadScriptOnce(src) {
