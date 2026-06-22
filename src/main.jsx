@@ -179,10 +179,6 @@ function App() {
   const [query, setQuery] = useState('');
   const [message, setMessage] = useState('');
   const [previewFile, setPreviewFile] = useState(null);
-  const [senderEmail, setSenderEmail] = useState('');
-  const [senderEmailInput, setSenderEmailInput] = useState('');
-  const [smtpPasswordInput, setSmtpPasswordInput] = useState('');
-  const [smtpPasswordConfigured, setSmtpPasswordConfigured] = useState(false);
   const [supplierFilter, setSupplierFilter] = useState([]);
   const [ownerFilter, setOwnerFilter] = useState([]);
   const [statusFilter, setStatusFilter] = useState([]);
@@ -287,7 +283,6 @@ function App() {
     if (!group) return false;
     return hasPermission(group.value) || group.children.some((item) => canAccessTab(item.tab));
   }
-  const canManageMailSettings = user?.name === systemOwnerName;
   const canManagePermissions = user?.name === systemOwnerName;
   const canManageSystemFiles = user?.name === systemOwnerName;
   const canManageMaintenanceLibrary = user?.name === systemOwnerName;
@@ -459,11 +454,7 @@ function App() {
     setSuppliers(await supplierRes.json());
     setOwners(await ownerRes.json());
     setReminders(await reminderRes.json());
-    const settings = await settingsRes.json();
-    setSenderEmail(settings.senderEmail || '');
-    setSenderEmailInput(settings.senderEmail || '');
-    setSmtpPasswordConfigured(Boolean(settings.smtpPasswordConfigured));
-    setSmtpPasswordInput('');
+    await settingsRes.json();
     if (usersRes?.ok) {
       setManagedUsers(await usersRes.json());
     } else if (!canManagePermissions) {
@@ -1372,29 +1363,6 @@ function App() {
     await loadData();
   }
 
-  async function saveMailSettings(event) {
-    event.preventDefault();
-    const res = await fetch(`${API}/api/settings`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        user: user.name,
-        senderEmail: senderEmailInput,
-        smtpPassword: smtpPasswordInput
-      })
-    });
-    if (!res.ok) {
-      setMessage('只有孙立柱可以修改邮件配置。');
-      return;
-    }
-    const settings = await res.json();
-    setSenderEmail(settings.senderEmail || '');
-    setSenderEmailInput(settings.senderEmail || '');
-    setSmtpPasswordConfigured(Boolean(settings.smtpPasswordConfigured));
-    setSmtpPasswordInput('');
-    setMessage('邮件配置已保存。');
-  }
-
   async function createManagedUser(event) {
     event.preventDefault();
     const name = newUserName.trim();
@@ -1765,32 +1733,6 @@ function App() {
         <div className="user-box">
           <strong>{user.name}</strong>
           <span>{user.role}</span>
-          {canManageMailSettings && (
-            <div className="sender-email">
-              <small>发送邮箱</small>
-              <span>{senderEmail || '未设置'}</span>
-              <small>SMTP授权码</small>
-              <span>{smtpPasswordConfigured ? '已配置' : '未配置'}</span>
-            </div>
-          )}
-          {canManageMailSettings && (
-            <form className="sender-email-form" onSubmit={saveMailSettings}>
-              <input
-                type="email"
-                placeholder="填写发送邮箱"
-                value={senderEmailInput}
-                onChange={(event) => setSenderEmailInput(event.target.value)}
-              />
-              <input
-                type="password"
-                placeholder={smtpPasswordConfigured ? '留空则不修改授权码' : '填写SMTP授权码'}
-                value={smtpPasswordInput}
-                onChange={(event) => setSmtpPasswordInput(event.target.value)}
-                autoComplete="new-password"
-              />
-              <button type="submit">保存邮件配置</button>
-            </form>
-          )}
           <button onClick={() => {
             localStorage.removeItem('invoiceUser');
             setUser(null);

@@ -184,32 +184,6 @@ select {
   color: #93a4bb;
 }
 
-.sender-email {
-  display: grid;
-  gap: 3px;
-  padding: 8px 0 2px;
-}
-
-.sender-email small {
-  color: #cbd5e1;
-}
-
-.sender-email-form {
-  display: grid;
-  gap: 8px;
-}
-
-.sender-email-form input {
-  min-width: 0;
-  border-color: #334155;
-  background: #0f172a;
-  color: white;
-}
-
-.sender-email-form input::placeholder {
-  color: #64748b;
-}
-
 .user-create-form {
   display: flex;
   gap: 10px;
@@ -329,16 +303,6 @@ select {
   height: 14px;
   padding: 0;
   accent-color: #2563eb;
-}
-
-.sidebar .sender-email-form button {
-  text-align: center;
-  background: #2563eb;
-  color: white;
-}
-
-.sidebar .sender-email-form button:hover {
-  background: #1d4ed8;
 }
 
 .content {
