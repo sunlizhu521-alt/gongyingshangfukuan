@@ -118,7 +118,7 @@ async function loadServerReceiptSummary() {
       const response = await fetchKcfxApi(`${RECEIPT_SUMMARY_API}?v=${Date.now()}`, { cache: "no-store" }, RECEIPT_SUMMARY_TIMEOUT_MS);
       if (!response.ok) throw new Error(`receipt-summary HTTP ${response.status}`);
       payload = await response.json();
-      if (payload?.ok && payload.status === "ready" && Array.isArray(payload.rows)) {
+      if (payload?.ok && payload.status === "ready" && hasServerReceiptSummaryRows(payload)) {
         applyServerReceiptSummary(payload);
         return true;
       }
@@ -133,10 +133,35 @@ async function loadServerReceiptSummary() {
   }
 }
 
+function hasServerReceiptSummaryRows(payload) {
+  return Array.isArray(payload?.rows) || (Array.isArray(payload?.rowFields) && Array.isArray(payload?.rowsCompact));
+}
+
+function getServerReceiptSummaryRows(payload) {
+  if (Array.isArray(payload?.rows)) return payload.rows;
+  const fields = Array.isArray(payload?.rowFields) ? payload.rowFields : [];
+  const rowsCompact = Array.isArray(payload?.rowsCompact) ? payload.rowsCompact : [];
+  if (!fields.length || !rowsCompact.length) return [];
+  const ageBuckets = Array.isArray(payload.ageBuckets) && payload.ageBuckets.length ? payload.ageBuckets : AGE_BUCKETS;
+  return rowsCompact.map((values) => {
+    const row = {};
+    fields.forEach((field, index) => {
+      const value = Array.isArray(values) ? values[index] : undefined;
+      if (field === "ageQuantities" || field === "ageSettlementAmounts") {
+        const bucketValues = Array.isArray(value) ? value : [];
+        row[field] = Object.fromEntries(ageBuckets.map((bucket, bucketIndex) => [bucket, Number(bucketValues[bucketIndex]) || 0]));
+      } else {
+        row[field] = value ?? "";
+      }
+    });
+    return row;
+  });
+}
+
 function applyServerReceiptSummary(payload) {
   const records = payload.records || {};
   const diagnostics = payload.diagnostics || {};
-  summaryRows = Array.isArray(payload.rows) ? payload.rows : [];
+  summaryRows = getServerReceiptSummaryRows(payload);
   departmentMatchDiagnostics = {
     matched: Number(diagnostics.matched || 0),
     unmatched: Number(diagnostics.unmatched || 0),

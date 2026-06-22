@@ -1896,7 +1896,34 @@ const KCFX_RECEIPT_UNINSPECTED_RETURN_CATEGORIES = new Set(['全新品', '其他
 const KCFX_RECEIPT_OTHER_UNSALEABLE_RETURN_CATEGORIES = new Set(['健康办公', '其他/配件']);
 let kcfxReceiptSummaryCache = null;
 let kcfxReceiptSummaryPromise = null;
-const KCFX_RECEIPT_SUMMARY_CACHE_VERSION = 2;
+const KCFX_RECEIPT_SUMMARY_CACHE_VERSION = 3;
+const KCFX_RECEIPT_SUMMARY_ROW_FIELDS = [
+  'materialCode',
+  'sku',
+  'materialName',
+  'department',
+  'productCategory',
+  'productLine',
+  'series',
+  'warehouseType',
+  'saleStatus',
+  'warehouseLocation',
+  'warehouse',
+  'organization',
+  'inventoryDays',
+  'pmcType',
+  'pmcBasis',
+  'pmcReason',
+  'ageQuantities',
+  'ageSettlementAmounts',
+  'ageQuantityTotal',
+  'ageSettlementAmount',
+  'inventoryTotal',
+  'inventoryAmountTotal',
+  'endingQty',
+  'settlementPrice',
+  'settlementAmount'
+];
 
 function normalizeKcfxIds(idsParam) {
   const ids = String(idsParam || '')
@@ -2174,7 +2201,7 @@ async function readKcfxReceiptSummaryCache() {
 
 async function readKcfxReceiptSummaryCacheFromDisk() {
   const payload = JSON.parse(await readFile(kcfxReceiptSummaryPath, 'utf8'));
-  if (payload?.ok && Array.isArray(payload.rows)) {
+  if (payload?.ok && (Array.isArray(payload.rows) || Array.isArray(payload.rowsCompact))) {
     kcfxReceiptSummaryCache = payload;
     return payload;
   }
@@ -2191,8 +2218,21 @@ async function writeKcfxReceiptSummaryCache(payload) {
 function isKcfxReceiptSummaryFresh(cache, db) {
   if (!cache?.ok) return false;
   if (cache.receiptSummaryVersion !== KCFX_RECEIPT_SUMMARY_CACHE_VERSION) return false;
+  if (!Array.isArray(cache.rowsCompact) || !Array.isArray(cache.rowFields)) return false;
   if (!db?.kcfxLibrary?.savedAt) return true;
   return cache.savedAt === db.kcfxLibrary.savedAt;
+}
+
+function compactKcfxReceiptSummaryRows(rows) {
+  return rows.map((row) => KCFX_RECEIPT_SUMMARY_ROW_FIELDS.map((field) => {
+    if (field === 'ageQuantities') {
+      return KCFX_RECEIPT_AGE_BUCKETS.map((bucket) => Number(row.ageQuantities?.[bucket]) || 0);
+    }
+    if (field === 'ageSettlementAmounts') {
+      return KCFX_RECEIPT_AGE_BUCKETS.map((bucket) => Number(row.ageSettlementAmounts?.[bucket]) || 0);
+    }
+    return row[field] ?? '';
+  }));
 }
 
 async function buildKcfxReceiptSummary(db = null) {
@@ -2216,7 +2256,9 @@ async function buildKcfxReceiptSummary(db = null) {
     savedAt: database.kcfxLibrary?.savedAt || '',
     generatedAt: new Date().toISOString(),
     records: Object.fromEntries(Object.entries(records).map(([id, record]) => [id, stripKcfxReceiptRecord(record)])),
-    rows,
+    rowFields: KCFX_RECEIPT_SUMMARY_ROW_FIELDS,
+    ageBuckets: KCFX_RECEIPT_AGE_BUCKETS,
+    rowsCompact: compactKcfxReceiptSummaryRows(rows),
     rowCount: rows.length,
     diagnostics,
     closedInventory
