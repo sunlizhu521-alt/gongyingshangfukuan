@@ -39,7 +39,9 @@ function clearAuthenticatedUser() {
 }
 
 function securityWatermarkText(user) {
-  return user?.name || '';
+  const name = user?.name || '未登录用户';
+  const date = new Date().toLocaleDateString('zh-CN');
+  return `内部资料 ${name} ${date}`;
 }
 
 const INSPECTION_NOTICE_FIELDS = [
