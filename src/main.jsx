@@ -38,6 +38,12 @@ function clearAuthenticatedUser() {
   localStorage.removeItem(AUTH_USER_STORAGE_KEY);
 }
 
+function securityWatermarkText(user) {
+  const name = user?.name || '未登录用户';
+  const date = new Date().toLocaleDateString('zh-CN');
+  return `内部资料 ${name} ${date}`;
+}
+
 const INSPECTION_NOTICE_FIELDS = [
   { key: 'inspectionApplicant', label: '验货填写人', readonly: true },
   { key: 'inspectionFillTime', label: '验货填写时间', inputType: 'date' },
@@ -1722,6 +1728,11 @@ function App() {
 
   return (
     <main className="app-shell">
+      <div className="security-watermark" aria-hidden="true">
+        {Array.from({ length: 80 }, (_, index) => (
+          <span key={index}>{securityWatermarkText(user)}</span>
+        ))}
+      </div>
       <aside className="sidebar">
         <h1>库存和销售数据看板</h1>
         <div className="app-version-time">版本时间：{appVersionTime}</div>
