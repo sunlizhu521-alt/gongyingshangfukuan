@@ -262,6 +262,57 @@ function publicUser(user) {
   };
 }
 
+function normalizeSession(session) {
+  return {
+    id: session.id || randomUUID(),
+    userId: String(session.userId || ''),
+    userName: String(session.userName || ''),
+    deviceId: String(session.deviceId || ''),
+    token: String(session.token || ''),
+    userAgent: String(session.userAgent || ''),
+    createdAt: session.createdAt || new Date().toISOString(),
+    lastSeenAt: session.lastSeenAt || session.createdAt || new Date().toISOString()
+  };
+}
+
+function publicSessionUser(user, session) {
+  return {
+    ...publicUser(user),
+    sessionToken: session.token,
+    deviceId: session.deviceId
+  };
+}
+
+function createUserSession(db, user, deviceId, req) {
+  const session = normalizeSession({
+    id: randomUUID(),
+    userId: user.id,
+    userName: user.name,
+    deviceId,
+    token: randomUUID(),
+    userAgent: req.get('user-agent') || '',
+    createdAt: new Date().toISOString(),
+    lastSeenAt: new Date().toISOString()
+  });
+  db.sessions = (db.sessions || []).filter((item) => item.userId !== user.id || item.deviceId !== deviceId);
+  db.sessions.push(session);
+  return session;
+}
+
+function findValidSession(db, source = {}, req = null) {
+  const userId = String(source.userId || '').trim();
+  const token = String(source.sessionToken || source.token || '').trim();
+  const deviceId = String(source.deviceId || '').trim();
+  if (!userId || !token || !deviceId) return null;
+  const session = (db.sessions || []).find((item) => item.userId === userId && item.token === token && item.deviceId === deviceId);
+  if (!session) return null;
+  const userAgent = req ? String(req.get('user-agent') || '') : '';
+  if (session.userAgent && userAgent && session.userAgent !== userAgent) return null;
+  const user = db.users.find((item) => item.id === session.userId && item.name === session.userName);
+  if (!isUserApproved(user)) return null;
+  return { user, session };
+}
+
 function detectMime(buffer) {
   const header = buffer.subarray(0, 8).toString('latin1');
   if (header.startsWith('%PDF')) return 'application/pdf';
@@ -504,6 +555,7 @@ function normalizeDb(db) {
     ...(db.settings || {})
   };
   db.users = (db.users || []).map(normalizeUser);
+  db.sessions = (db.sessions || []).map(normalizeSession).filter((session) => session.userId && session.deviceId && session.token);
   if (!db.users.some((user) => user.name === SYSTEM_OWNER_NAME)) {
     db.users.unshift(normalizeUser({
       id: 'u-admin',
@@ -569,6 +621,7 @@ async function ensureDb() {
         senderEmail: '',
         smtpPassword: ''
       },
+      sessions: [],
       users: [
         { id: 'u-admin', name: '孙立柱', password: '521sunlizhu', role: '管理员' },
         { id: 'u-buyer', name: '采购员', password: '123456', role: '普通用户' }
@@ -1177,10 +1230,35 @@ app.post('/api/login', async (req, res) => {
   const db = await ensureDb();
   const name = String(req.body.name || '').trim();
   const password = String(req.body.password || '');
+  const deviceId = String(req.body.deviceId || '').trim();
+  if (!deviceId) return res.status(400).json({ error: 'missing device id' });
   const user = db.users.find((item) => item.name === name && item.password === password);
   if (!user) return res.status(401).json({ error: 'invalid credentials' });
   if (!isUserApproved(user)) return res.status(403).json({ error: 'pending approval' });
-  res.json(publicUser(user));
+  const session = createUserSession(db, user, deviceId, req);
+  await saveDb(db);
+  res.json(publicSessionUser(user, session));
+});
+
+app.post('/api/session/verify', async (req, res) => {
+  const db = await ensureDb();
+  const result = findValidSession(db, req.body || {}, req);
+  if (!result) return res.status(401).json({ error: 'invalid session' });
+  result.session.lastSeenAt = new Date().toISOString();
+  await saveDb(db);
+  res.json(publicSessionUser(result.user, result.session));
+});
+
+app.post('/api/logout', async (req, res) => {
+  const db = await ensureDb();
+  const userId = String(req.body.userId || '').trim();
+  const token = String(req.body.sessionToken || req.body.token || '').trim();
+  const deviceId = String(req.body.deviceId || '').trim();
+  db.sessions = (db.sessions || []).filter((session) => {
+    return !(session.userId === userId && session.token === token && session.deviceId === deviceId);
+  });
+  await saveDb(db);
+  res.json({ ok: true });
 });
 
 app.post('/api/register', async (req, res) => {

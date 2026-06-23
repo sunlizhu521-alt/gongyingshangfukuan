@@ -4,10 +4,38 @@ import * as XLSX from 'xlsx';
 import './styles.css';
 
 const API = import.meta.env.DEV ? 'http://localhost:4001' : '';
+const AUTH_USER_STORAGE_KEY = 'invoiceUser';
+const AUTH_DEVICE_STORAGE_KEY = 'invoiceDeviceId';
 
 function createClientId() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function readStoredUser() {
+  try {
+    return JSON.parse(localStorage.getItem(AUTH_USER_STORAGE_KEY) || 'null');
+  } catch {
+    localStorage.removeItem(AUTH_USER_STORAGE_KEY);
+    return null;
+  }
+}
+
+function getClientDeviceId() {
+  let deviceId = localStorage.getItem(AUTH_DEVICE_STORAGE_KEY);
+  if (!deviceId) {
+    deviceId = createClientId();
+    localStorage.setItem(AUTH_DEVICE_STORAGE_KEY, deviceId);
+  }
+  return deviceId;
+}
+
+function storeAuthenticatedUser(user) {
+  localStorage.setItem(AUTH_USER_STORAGE_KEY, JSON.stringify(user));
+}
+
+function clearAuthenticatedUser() {
+  localStorage.removeItem(AUTH_USER_STORAGE_KEY);
 }
 
 const INSPECTION_NOTICE_FIELDS = [
@@ -164,7 +192,8 @@ function readInspectionIndexedDbRecord(id) {
 
 function App() {
   const [activeTab, setActiveTab] = useState('salesInventoryReceiptSummary');
-  const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('invoiceUser') || 'null'));
+  const [user, setUser] = useState(() => readStoredUser());
+  const [authChecked, setAuthChecked] = useState(false);
   const [authMode, setAuthMode] = useState('login');
   const [loginName, setLoginName] = useState('');
   const [password, setPassword] = useState('');
@@ -252,6 +281,45 @@ function App() {
       }))
     }
   ];
+  useEffect(() => {
+    let cancelled = false;
+    async function verifyStoredSession() {
+      const storedUser = readStoredUser();
+      if (!storedUser?.sessionToken || !storedUser?.deviceId) {
+        clearAuthenticatedUser();
+        if (!cancelled) {
+          setUser(null);
+          setAuthChecked(true);
+        }
+        return;
+      }
+      try {
+        const res = await fetch(`${API}/api/session/verify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: storedUser.id,
+            sessionToken: storedUser.sessionToken,
+            deviceId: storedUser.deviceId
+          })
+        });
+        if (!res.ok) throw new Error(`session verify HTTP ${res.status}`);
+        const verifiedUser = await res.json();
+        storeAuthenticatedUser(verifiedUser);
+        if (!cancelled) setUser(verifiedUser);
+      } catch {
+        clearAuthenticatedUser();
+        if (!cancelled) setUser(null);
+      } finally {
+        if (!cancelled) setAuthChecked(true);
+      }
+    }
+    verifyStoredSession();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const tabPermissionMap = Object.fromEntries(
     permissionGroups.flatMap((group) => group.children.map((item) => [item.tab, item.value]))
   );
@@ -494,13 +562,13 @@ function App() {
   }
 
   useEffect(() => {
-    if (user) loadData().catch((error) => {
+    if (authChecked && user) loadData().catch((error) => {
       setMessage(`后端服务连接失败：${error?.message || '请确认服务已启动。'}`);
     });
-  }, [user]);
+  }, [authChecked, user]);
 
   useEffect(() => {
-    if (!user || activeTab !== 'inspectionNotice' || !canAccessTab('inspectionNotice')) return undefined;
+    if (!authChecked || !user || activeTab !== 'inspectionNotice' || !canAccessTab('inspectionNotice')) return undefined;
     let cancelled = false;
     const refresh = async () => {
       try {
@@ -527,10 +595,10 @@ function App() {
       cancelled = true;
       window.removeEventListener('focus', refresh);
     };
-  }, [activeTab, user]);
+  }, [activeTab, authChecked, user]);
 
   useEffect(() => {
-    if (!user || accessibleEmbeddedKcfxPages.length === 0) return;
+    if (!authChecked || !user || accessibleEmbeddedKcfxPages.length === 0) return;
     const ids = [
       'sales-data',
       'dim-product',
@@ -541,10 +609,10 @@ function App() {
     ].join(',');
     fetch(`${API}/api/kcfx-library/preloaded?ids=${encodeURIComponent(ids)}`, { cache: 'no-store' }).catch(() => {});
     fetch(`${API}/api/kcfx-library/receipt-summary`, { cache: 'no-store' }).catch(() => {});
-  }, [user, accessibleEmbeddedKcfxPages.length]);
+  }, [authChecked, user, accessibleEmbeddedKcfxPages.length]);
 
   useEffect(() => {
-    if (!user || accessibleEmbeddedKcfxPages.length === 0) return undefined;
+    if (!authChecked || !user || accessibleEmbeddedKcfxPages.length === 0) return undefined;
     setMountedKcfxTabs((current) => {
       const next = new Set(current);
       accessibleEmbeddedKcfxPages.forEach((page) => {
@@ -554,7 +622,7 @@ function App() {
       return next;
     });
     return undefined;
-  }, [user, accessibleEmbeddedKcfxPages.length, activeEmbeddedKcfxPage?.tab]);
+  }, [authChecked, user, accessibleEmbeddedKcfxPages.length, activeEmbeddedKcfxPage?.tab]);
 
   useEffect(() => {
     let cancelled = false;
@@ -587,14 +655,14 @@ function App() {
         setActiveTab(firstAllowed.tab);
       }
     }
-    if (user && tabPermissionMap[activeTab] && !canAccessTab(activeTab)) {
+    if (authChecked && user && tabPermissionMap[activeTab] && !canAccessTab(activeTab)) {
       openFirstAllowedTab();
       return;
     }
-    if (user && !canManagePermissions && activeTab === 'permissionManagement') {
+    if (authChecked && user && !canManagePermissions && activeTab === 'permissionManagement') {
       openFirstAllowedTab();
     }
-  }, [activeTab, canAccessMaintenanceLibrary, canAccessSalesInventory, canAccessSystemFileLibrary, canManagePermissions, user]);
+  }, [activeTab, authChecked, canAccessMaintenanceLibrary, canAccessSalesInventory, canAccessSystemFileLibrary, canManagePermissions, user]);
 
   useEffect(() => {
     if (!activeEmbeddedKcfxPage) {
@@ -1067,17 +1135,37 @@ function App() {
     const res = await fetch(`${API}/api/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, password })
+      body: JSON.stringify({ name, password, deviceId: getClientDeviceId() })
     });
     if (!res.ok) {
       setMessage(res.status === 403 ? '注册申请待孙立柱审核，审核通过后再登录。' : '账号或密码不正确。');
       return;
     }
     const nextUser = await res.json();
-    localStorage.setItem('invoiceUser', JSON.stringify(nextUser));
+    storeAuthenticatedUser(nextUser);
     setUser(nextUser);
     setPassword('');
     setMessage('');
+  }
+
+  async function logout() {
+    const storedUser = readStoredUser();
+    if (storedUser?.sessionToken) {
+      fetch(`${API}/api/logout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: storedUser.id,
+          sessionToken: storedUser.sessionToken,
+          deviceId: storedUser.deviceId
+        })
+      }).catch(() => {});
+    }
+    clearAuthenticatedUser();
+    setUser(null);
+    setLoginName('');
+    setPassword('');
+    setAuthMode('login');
   }
 
   async function register(event) {
@@ -1538,6 +1626,17 @@ function App() {
     link.remove();
   }
 
+  if (!authChecked) {
+    return (
+      <main className="login-shell">
+        <section className="login-panel">
+          <h1>正在验证登录</h1>
+          <p>请稍候...</p>
+        </section>
+      </main>
+    );
+  }
+
   if (!user) {
     return (
       <main className="login-shell">
@@ -1734,11 +1833,7 @@ function App() {
           <strong>{user.name}</strong>
           <span>{user.role}</span>
           <button onClick={() => {
-            localStorage.removeItem('invoiceUser');
-            setUser(null);
-            setLoginName('');
-            setPassword('');
-            setAuthMode('login');
+            logout();
           }}>退出</button>
         </div>
       </aside>
