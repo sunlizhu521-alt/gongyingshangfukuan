@@ -122,6 +122,7 @@ const SALES_INVENTORY_PERMISSIONS = [
   'salesInventory.receiptSummary',
   'salesInventory.inventoryTrend',
   'salesInventory.salesAnalysis',
+  'salesInventory.salesTrend',
   'salesInventory.comparison',
   'salesInventory.errors'
 ];

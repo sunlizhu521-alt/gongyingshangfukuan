@@ -28,6 +28,7 @@ let salesInventoryTrendSummaries = [];
 let isRefreshingFilters = false;
 
 document.addEventListener("DOMContentLoaded", async () => {
+  const salesStatusEl = $("#salesStatus");
   $("#clearFiltersBtn")?.addEventListener("click", clearFilters);
   $("#downloadBtn")?.addEventListener("click", downloadCurrentRows);
   $("#clearSalesInventoryTrendFiltersBtn")?.addEventListener("click", clearSalesInventoryTrendFilters);
@@ -41,15 +42,15 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
   try {
     await loadSharedLibrary({
-      statusEl: $("#salesStatus"),
+      statusEl: salesStatusEl,
       ids: SALES_ANALYSIS_REQUIRED_RECORD_IDS,
       onProgress: ({ percent, message }) => {
         const value = Number.isFinite(Number(percent)) ? ` ${Math.round(Number(percent))}%` : "";
-        $("#salesStatus").textContent = `${message || "正在从腾讯云读取销售数据文件..."}${value}`;
+        setText("#salesStatus", `${message || "正在从腾讯云读取销售数据文件..."}${value}`);
       }
     });
   } catch (error) {
-    $("#salesStatus").textContent = `腾讯云数据同步失败：${error?.message || error}`;
+    setText("#salesStatus", `腾讯云数据同步失败：${error?.message || error}`);
   }
   await refreshSalesAnalysis();
 });
@@ -63,7 +64,7 @@ async function refreshSalesAnalysis() {
   renderSourcePanel(salesRecord, records);
   if (!salesRecord) {
     salesRows = [];
-    $("#salesStatus").textContent = "缺少销售数据文件，请先到销售数据文件页面上传并应用。";
+    setText("#salesStatus", "缺少销售数据文件，请先到销售数据文件页面上传并应用。");
     populateFilters([]);
     renderSalesInventoryTrendDashboard([]);
     renderSalesAnalysis();
@@ -75,7 +76,7 @@ async function refreshSalesAnalysis() {
     const parseText = salesRecord.parseStatus && salesRecord.parseStatus !== "ready"
       ? `腾讯云已找到销售数据文件，当前状态：${salesRecord.parseStatus}，请稍后刷新。`
       : "腾讯云已找到销售数据文件，但完整解析数据还未就绪，请稍后刷新。";
-    $("#salesStatus").textContent = parseText;
+    setText("#salesStatus", parseText);
     populateFilters([]);
     renderSalesInventoryTrendDashboard([]);
     renderSalesAnalysis();
@@ -113,7 +114,7 @@ async function refreshSalesAnalysis() {
   salesRows = allSalesRows.filter((row) => !isExcludedSalesRow(row));
 
   populateFilters(salesRows);
-  $("#salesStatus").textContent = buildStatusText(salesRecord, salesRows);
+  setText("#salesStatus", buildStatusText(salesRecord, salesRows));
   renderSalesInventoryTrendDashboard(salesRows);
   renderSalesAnalysis();
 }
@@ -141,6 +142,7 @@ function refreshSalesFilterOptions(rows = salesRows) {
 }
 
 function renderSalesAnalysis() {
+  if (!$("#salesRows")) return;
   const search = normalizeText($("#searchInput")?.value || "").toLowerCase();
   const selections = getFilterSelections(SALES_FILTERS);
   filteredRows = salesRows.filter((row) => {
@@ -162,8 +164,8 @@ function renderSalesAnalysis() {
 }
 
 function renderMetrics(rows) {
-  $("#salesQtyTotal").textContent = formatQuantity(sum(rows, "qty"));
-  $("#customerTotal").textContent = formatNumber(uniqueValues(rows, "customer").length, 0);
+  setText("#salesQtyTotal", formatQuantity(sum(rows, "qty")));
+  setText("#customerTotal", formatNumber(uniqueValues(rows, "customer").length, 0));
 }
 
 function renderTable(rows) {
@@ -1059,7 +1061,7 @@ function downloadCurrentRows() {
     row.model,
     row.qty
   ])].map((line) => line.map(csvCell).join(","));
-  downloadCsv(`销售数据分析_${new Date().toISOString().slice(0, 19).replace(/[-:T]/g, "")}.csv`, lines);
+  downloadCsv(`月度销售数据_${new Date().toISOString().slice(0, 19).replace(/[-:T]/g, "")}.csv`, lines);
 }
 
 function csvCell(value) {

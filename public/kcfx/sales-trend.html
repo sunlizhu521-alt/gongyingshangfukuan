@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>库存分析看板 销售趋势变化</title>
+  <link rel="stylesheet" href="styles.css?v=20260612h">
+</head>
+<body class="receipt-page">
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <strong>库存分析看板</strong>
+        <span>供应链维护更新</span>
+      </div>
+      <nav class="nav">
+        <a href="receipt-summary.html">关账库存分析</a>
+        <a href="inventory-trend.html">库存趋势分析</a>
+        <a href="sales-analysis.html">月度销售数据</a>
+        <a class="active" href="sales-trend.html">销售趋势变化</a>
+        <a href="comparison.html">表格对比分析</a>
+        <a href="fact-library.html">库存数据文件</a>
+        <a href="sales-library.html">销售数据文件</a>
+        <a href="file-library.html">维度表文件库</a>
+        <a href="errors.html">报错信息提示</a>
+      </nav>
+    </aside>
+
+    <main class="content">
+      <header class="topbar">
+        <div>
+          <h1>销售趋势变化</h1>
+          <p id="salesStatus" class="status-line">正在读取销售数据文件...</p>
+        </div>
+      </header>
+
+      <section class="trend-embed-panel analysis-section-trend">
+        <div class="table-title-row">
+          <div>
+            <div class="table-title">销售趋势变化</div>
+            <p id="salesInventoryTrendStatus" class="status-line">正在读取销售数据日期列...</p>
+          </div>
+        </div>
+        <section class="toolbar trend-filter-toolbar">
+          <div id="salesInventoryMonthTrendFilter" class="month-picker"></div>
+          <div id="salesInventoryOrgTrendFilter" class="multi-filter"></div>
+          <div id="salesInventoryStoreShortNameTrendFilter" class="multi-filter"></div>
+          <div id="salesInventoryProductTrendFilter" class="multi-filter"></div>
+          <div id="salesInventorySeriesTrendFilter" class="multi-filter"></div>
+          <div id="salesInventoryModelTrendFilter" class="multi-filter"></div>
+          <button id="clearSalesInventoryTrendFiltersBtn" type="button">清除所有筛选</button>
+        </section>
+        <section class="trend-chart-grid">
+          <div class="panel trend-panel">
+            <h2>销售趋势 <span id="salesInventoryTrendCondition" class="trend-condition"></span><span id="salesInventoryValueTrendTotal" class="chart-total"></span></h2>
+            <div id="salesInventoryValueTrendChart" class="vertical-trend-chart"></div>
+          </div>
+        </section>
+      </section>
+
+      <div id="sourcePanel" class="data-source-panel"></div>
+    </main>
+  </div>
+
+  <script src="storage.js?v=20260617a"></script>
+  <script src="shared-library.js?v=20260618f"></script>
+  <script src="sales-analysis.js?v=20260623a"></script>
+</body>
+</html>
