@@ -327,6 +327,13 @@ function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (authChecked && !user) {
+      setLoginName('');
+      setPassword('');
+    }
+  }, [authChecked, user]);
+
   const tabPermissionMap = Object.fromEntries(
     permissionGroups.flatMap((group) => group.children.map((item) => [item.tab, item.value]))
   );
@@ -1666,13 +1673,13 @@ function App() {
     return (
       <main className="login-shell">
         {authMode === 'login' ? (
-          <form className="login-panel" onSubmit={login}>
+          <form className="login-panel" onSubmit={login} autoComplete="off">
             <h1>库存和销售数据看板</h1>
             <label>
               姓名
               <input
-                name="username"
-                autoComplete="username"
+                name="login-display-name"
+                autoComplete="off"
                 value={loginName}
                 onChange={(event) => setLoginName(event.target.value)}
               />
@@ -1680,9 +1687,9 @@ function App() {
             <label>
               密码
               <input
-                name="password"
+                name="login-display-passcode"
                 type="password"
-                autoComplete="current-password"
+                autoComplete="new-password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
               />
@@ -1701,13 +1708,13 @@ function App() {
             {message && <p className="message">{message}</p>}
           </form>
         ) : (
-          <form className="login-panel" onSubmit={register}>
+          <form className="login-panel" onSubmit={register} autoComplete="off">
             <h1>申请注册</h1>
             <label>
               姓名
               <input
-                name="username"
-                autoComplete="username"
+                name="register-display-name"
+                autoComplete="off"
                 value={registerName}
                 onChange={(event) => setRegisterName(event.target.value)}
               />
