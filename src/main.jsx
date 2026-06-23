@@ -72,7 +72,7 @@ const KCFX_INDEXED_DB_NAME = 'kcfx-inventory-analysis-file-library';
 const KCFX_INDEXED_DB_STORE = 'files';
 
 const SALES_INVENTORY_PAGES = [
-  { tab: 'salesInventoryReceiptSummary', key: 'receiptSummary', label: '供应链库存分析', sourceFile: 'receipt-summary.html' },
+  { tab: 'salesInventoryReceiptSummary', key: 'receiptSummary', label: '关账库存分析', sourceFile: 'receipt-summary.html' },
   { tab: 'salesInventoryInventoryTrend', key: 'inventoryTrend', label: '库存趋势分析', sourceFile: 'inventory-trend.html' },
   { tab: 'salesInventorySalesAnalysis', key: 'salesAnalysis', label: '销售数据分析', sourceFile: 'sales-analysis.html' },
   { tab: 'salesInventoryComparison', key: 'comparison', label: '表格对比分析', sourceFile: 'comparison.html' },
