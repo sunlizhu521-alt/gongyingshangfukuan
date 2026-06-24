@@ -7,7 +7,6 @@ import {
   INSPECTION_DEPARTMENT_OPTIONS,
   INSPECTION_LIBRARY_RECORD_IDS,
   INSPECTION_NOTICE_FIELDS,
-  MAINTENANCE_LIBRARY_MENU_PAGES,
   MAINTENANCE_LIBRARY_PAGES,
   MAINTENANCE_LIBRARY_TABS,
   PRIORITY_KCFX_PRELOAD_TABS,
@@ -15,8 +14,6 @@ import {
   PRODUCT_SERIES_COLUMN,
   PURCHASE_DIVISION_ADDRESS_COLUMN,
   PURCHASE_DIVISION_SUPPLIER_COLUMN,
-  SALES_INVENTORY_PAGES,
-  SYSTEM_FILE_LIBRARY_MENU_PAGES,
   SYSTEM_FILE_LIBRARY_PAGES,
   embeddedKcfxPageMap,
   legacyPermissionMap,
@@ -40,6 +37,7 @@ import {
 } from './utils.js';
 import DataTable from './components/DataTable.jsx';
 import MultiFilter from './components/MultiFilter.jsx';
+import Sidebar from './components/Sidebar.jsx';
 import './styles.css';
 
 function App() {
@@ -1546,116 +1544,18 @@ function App() {
           <span key={index}>{securityWatermarkText(user)}</span>
         ))}
       </div>
-      <aside className="sidebar">
-        <h1>库存和销售数据看板</h1>
-        <div className="app-version-time">版本时间：{appVersionTime}</div>
-        <nav className="sidebar-menu" aria-label="系统菜单">
-          {canAccessSalesInventory && (
-          <div className="menu-group">
-              <button
-                type="button"
-                className={`menu-group-toggle ${isMenuGroupExpanded('salesInventory') ? 'active' : ''}`}
-                onClick={() => toggleMenuGroup('salesInventory')}
-                aria-expanded={isMenuGroupExpanded('salesInventory')}
-              >
-                库存和销售数据看板
-                <span>{isMenuGroupExpanded('salesInventory') ? '▾' : '▸'}</span>
-              </button>
-              {isMenuGroupExpanded('salesInventory') && (
-              <div className="submenu-list">
-                {SALES_INVENTORY_PAGES.filter((page) => canAccessTab(page.tab)).map((page) => (
-                  <button
-                    key={page.tab}
-                    className={activeTab === page.tab ? 'active' : ''}
-                    onClick={() => openMenuTab(page.tab, 'salesInventory')}
-                  >
-                    {page.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          )}
-          {canAccessMaintenanceLibrary && (
-          <div className="menu-group">
-              <button
-                type="button"
-                className={`menu-group-toggle ${isMenuGroupExpanded('maintenanceLibrary') ? 'active' : ''}`}
-                onClick={() => toggleMenuGroup('maintenanceLibrary')}
-                aria-expanded={isMenuGroupExpanded('maintenanceLibrary')}
-              >
-                维护文件库
-                <span>{isMenuGroupExpanded('maintenanceLibrary') ? '▾' : '▸'}</span>
-              </button>
-              {isMenuGroupExpanded('maintenanceLibrary') && (
-              <div className="submenu-list">
-                {MAINTENANCE_LIBRARY_MENU_PAGES.filter((page) => canAccessTab(page.tab)).map((page) => (
-                  <button
-                    key={page.tab}
-                    className={activeTab === page.tab ? 'active' : ''}
-                    onClick={() => openMenuTab(page.tab, 'maintenanceLibrary')}
-                  >
-                    {page.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          )}
-          {canAccessSystemFileLibrary && (
-          <div className="menu-group">
-              <button
-                type="button"
-                className={`menu-group-toggle ${isMenuGroupExpanded('systemFileLibrary') ? 'active' : ''}`}
-                onClick={() => toggleMenuGroup('systemFileLibrary')}
-                aria-expanded={isMenuGroupExpanded('systemFileLibrary')}
-              >
-                系统文件库
-                <span>{isMenuGroupExpanded('systemFileLibrary') ? '▾' : '▸'}</span>
-              </button>
-              {isMenuGroupExpanded('systemFileLibrary') && (
-              <div className="submenu-list">
-                {SYSTEM_FILE_LIBRARY_MENU_PAGES.filter((page) => canAccessTab(page.tab)).map((page) => (
-                  <button
-                    key={page.tab}
-                    className={activeTab === page.tab ? 'active' : ''}
-                    onClick={() => openMenuTab(page.tab, 'systemFileLibrary')}
-                  >
-                    {page.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          )}
-          {canManagePermissions && (
-          <div className="menu-group">
-              <button
-                type="button"
-                className={`menu-group-toggle ${isMenuGroupExpanded('systemManagement') ? 'active' : ''}`}
-                onClick={() => toggleMenuGroup('systemManagement')}
-                aria-expanded={isMenuGroupExpanded('systemManagement')}
-              >
-                系统管理
-                <span>{isMenuGroupExpanded('systemManagement') ? '▾' : '▸'}</span>
-              </button>
-              {isMenuGroupExpanded('systemManagement') && (
-              <div className="submenu-list">
-                <button className={activeTab === 'permissionManagement' ? 'active' : ''} onClick={() => openMenuTab('permissionManagement', 'systemManagement')}>权限管理</button>
-                <button className={activeTab === 'reminders' ? 'active' : ''} onClick={() => openMenuTab('reminders', 'systemManagement')}>操作日志</button>
-              </div>
-            )}
-          </div>
-          )}
-        </nav>
-        <div className="user-box">
-          <strong>{user.name}</strong>
-          <span>{user.role}</span>
-          <button onClick={() => {
-            logout();
-          }}>退出</button>
-        </div>
-      </aside>
+      <Sidebar
+        user={user}
+        activeTab={activeTab}
+        canAccessGroup={canAccessGroup}
+        canAccessTab={canAccessTab}
+        openMenuTab={openMenuTab}
+        toggleMenuGroup={toggleMenuGroup}
+        isMenuGroupExpanded={isMenuGroupExpanded}
+        expandedMenuGroups={expandedMenuGroups}
+        appVersionTime={appVersionTime}
+        logout={logout}
+      />
 
       <section className="content">
         {message && <div className="toast">{message}</div>}
