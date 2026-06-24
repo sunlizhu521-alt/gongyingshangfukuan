@@ -385,6 +385,15 @@ function renderSalesInventoryTrend() {
   const total = filteredRows.reduce((sumValue, row) => sumValue + (Number(row.value) || 0), 0);
   setText("#salesInventoryValueTrendTotal", `合计 ${formatQuantity(total)}`);
   renderSalesInventoryVerticalTrendChart(months, grouped, selections);
+  renderSalesTrendDimensionBars(filteredRows);
+}
+
+function renderSalesTrendDimensionBars(rows) {
+  renderBars("salesTrendOrgQtyChart", groupSum(rows, "salesOrg", 10), "salesTrendOrgQtyTotal");
+  renderBars("salesTrendStoreQtyChart", groupSum(rows, "storeShortName", 10), "salesTrendStoreQtyTotal");
+  renderBars("salesTrendProductLineQtyChart", groupSum(rows, "productLine", 10), "salesTrendProductLineQtyTotal");
+  renderBars("salesTrendSeriesQtyChart", groupSum(rows, "productSeries", 10), "salesTrendSeriesQtyTotal");
+  renderBars("salesTrendModelQtyChart", groupSum(rows, "model", 10), "salesTrendModelQtyTotal");
 }
 
 function renderSalesInventoryVerticalTrendChart(months, grouped, selections) {
