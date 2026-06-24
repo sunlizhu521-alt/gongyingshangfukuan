@@ -11,6 +11,7 @@ import { mkdir, readFile, readdir, rename, stat, unlink, writeFile } from 'node:
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzip } from 'node:zlib';
+import { initDb } from './db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -23,9 +24,12 @@ const kcfxRecordDir = path.join(dataDir, 'kcfx-records');
 const kcfxTrendSummaryPath = path.join(dataDir, 'kcfx-trend-summary.json');
 const kcfxReceiptSummaryPath = path.join(dataDir, 'kcfx-receipt-summary.json');
 const kcfxTrendWorkerPath = path.join(__dirname, 'kcfx-trend-summary-worker.js');
-const dbPath = path.join(dataDir, 'db.json');
 const kcfxDir = path.join(rootDir, 'public', 'kcfx');
 const serverStartedAt = new Date();
+
+await mkdir(uploadDir, { recursive: true });
+await mkdir(kcfxFileDir, { recursive: true });
+await mkdir(kcfxRecordDir, { recursive: true });
 
 const app = express();
 const upload = multer({
@@ -298,7 +302,7 @@ function createUserSession(db, user, deviceId, req) {
     createdAt: new Date().toISOString(),
     lastSeenAt: new Date().toISOString()
   });
-  db.sessions = (db.sessions || []).filter((item) => item.userId !== user.id || item.deviceId !== deviceId);
+  db.sessions.remove((item) => item.userId === user.id && item.deviceId === deviceId);
   db.sessions.push(session);
   return session;
 }
@@ -551,125 +555,6 @@ async function downloadUploadedFileByQuery(req, res) {
 }
 
 app.get('/download', downloadUploadedFileByQuery);
-
-function normalizeDb(db) {
-  db.settings = {
-    senderEmail: '',
-    smtpPassword: '',
-    ...(db.settings || {})
-  };
-  db.users = (db.users || []).map(normalizeUser);
-  db.sessions = (db.sessions || []).map(normalizeSession).filter((session) => session.userId && session.deviceId && session.token);
-  if (!db.users.some((user) => user.name === SYSTEM_OWNER_NAME)) {
-    db.users.unshift(normalizeUser({
-      id: 'u-admin',
-      name: SYSTEM_OWNER_NAME,
-      password: '521sunlizhu',
-      role: ROLE_ADMIN,
-      permissions: OWNER_PERMISSIONS
-    }));
-  }
-  db.suppliers = (db.suppliers || []).map((supplier) => ({
-    ...supplier,
-    shortName: supplier.shortName || supplier.name,
-    hasAnnualFrame: supplier.hasAnnualFrame || '',
-    remark: supplier.remark || ''
-  }));
-  db.invoices = (db.invoices || []).map((invoice) => ({
-    ...invoice,
-    oaProcessNo: invoice.oaProcessNo || '',
-    isOaPrinted: invoice.isOaPrinted || (['财务打款', '待财务打款'].includes(invoice.status) ? '是' : ''),
-    isPaid: invoice.isPaid || '',
-    status: ['财务打款', '待财务打款'].includes(invoice.status) ? '待财务付款' : invoice.status
-  }));
-  db.owners = (db.owners || []).map((owner) => ({
-    ...owner,
-    email: owner.email || ''
-  }));
-  db.qualityInspection = {
-    ...(db.qualityInspection || {}),
-    initialData: {
-      sheetName: '',
-      columns: [],
-      rows: [],
-      updatedAt: '',
-      ...(db.qualityInspection?.initialData || {})
-    },
-    notices: {
-      rows: [],
-      submittedAt: '',
-      submittedBy: '',
-      ...(db.qualityInspection?.notices || {})
-    }
-  };
-  db.kcfxLibrary = {
-    schemaVersion: 1,
-    project: 'kcfx',
-    savedAt: '',
-    records: {},
-    ...(db.kcfxLibrary || {})
-  };
-  db.kcfxLibrary.records = db.kcfxLibrary.records || {};
-  return db;
-}
-
-async function ensureDb() {
-  await mkdir(uploadDir, { recursive: true });
-  await mkdir(kcfxFileDir, { recursive: true });
-  await mkdir(kcfxRecordDir, { recursive: true });
-  try {
-    return normalizeDb(JSON.parse(await readFile(dbPath, 'utf8')));
-  } catch {
-    const db = {
-      settings: {
-        senderEmail: '',
-        smtpPassword: ''
-      },
-      sessions: [],
-      users: [
-        { id: 'u-admin', name: '孙立柱', password: '521sunlizhu', role: '管理员' }
-      ],
-      suppliers: [
-        { id: 's-1', name: '南京伴你行电子商务有限责任公司', termDays: 60 },
-        { id: 's-2', name: '浙江迈德斯特医疗器械科技有限公司', termDays: 45 }
-      ],
-      owners: [
-        { id: 'o-1', owner: '孙立柱', supplier: '南京伴你行电子商务有限责任公司' },
-        { id: 'o-2', owner: '采购员', supplier: '浙江迈德斯特医疗器械科技有限公司' }
-      ],
-      drafts: [],
-      invoices: [
-        {
-          id: 'i-1',
-          invoiceNo: '26322000004468465801',
-          supplier: '南京伴你行电子商务有限责任公司',
-          owner: '孙立柱',
-          amount: 63196,
-          issueDate: '2026-06-03',
-          dueDate: '2026-08-02',
-          status: '待提交付款申请',
-          originalName: '示例发票.png'
-        }
-      ],
-      reminders: [
-        {
-          id: 'r-1',
-          createdAt: format(new Date(), 'yyyy-MM-dd HH:mm:ss'),
-          type: '付款申请提醒',
-          target: '孙立柱',
-          content: '南京伴你行电子商务有限责任公司发票 26322000004468465801 请在截止日前提交 OA 付款申请。'
-        }
-      ]
-    };
-    await saveDb(db);
-    return db;
-  }
-}
-
-async function saveDb(db) {
-  await mkdir(dataDir, { recursive: true });
-  await writeFile(dbPath, JSON.stringify(db, null, 2), 'utf8');
-}
 
 async function removeUploadedFile(fileName) {
   if (!fileName) return;
@@ -938,7 +823,7 @@ function pushLog(db, type, target, content) {
 }
 
 async function sendWeeklyPaymentEmails(date = new Date()) {
-  const db = await ensureDb();
+  const db = await initDb(dataDir);
   const { start, end, rows } = weeklyPaymentApplications(db, date);
   const weekKey = format(start, 'yyyy-MM-dd');
   if (db.settings.lastWeeklyPaymentEmailKey === weekKey ||
@@ -955,13 +840,13 @@ async function sendWeeklyPaymentEmails(date = new Date()) {
   if (groups.length === 0) {
     pushLog(db, '定时邮件', '系统', `本周（${format(start, 'yyyy-MM-dd')} 至 ${format(end, 'yyyy-MM-dd')}）没有需要提交付款申请的发票。`);
     db.settings.lastWeeklyPaymentEmailKey = weekKey;
-    await saveDb(db);
+    await db.save();
     return { sentCount, skippedCount, weekKey };
   }
 
   if (!mailer) {
     pushLog(db, '定时邮件失败', '系统', '未配置 SMTP_PASS/SMTP_HOST，无法发送本周付款申请提醒邮件。');
-    await saveDb(db);
+    await db.save();
     return { sentCount, skippedCount: groups.length, weekKey, error: 'missing smtp config' };
   }
 
@@ -984,7 +869,7 @@ async function sendWeeklyPaymentEmails(date = new Date()) {
   }
 
   db.settings.lastWeeklyPaymentEmailKey = weekKey;
-  await saveDb(db);
+  await db.save();
   return { sentCount, skippedCount, weekKey };
 }
 
@@ -1230,7 +1115,7 @@ async function reprocessDraft(draft, db) {
 }
 
 app.post('/api/login', async (req, res) => {
-  const db = await ensureDb();
+  const db = await initDb(dataDir);
   const name = String(req.body.name || '').trim();
   const password = String(req.body.password || '');
   const deviceId = String(req.body.deviceId || '').trim();
@@ -1239,33 +1124,31 @@ app.post('/api/login', async (req, res) => {
   if (!user) return res.status(401).json({ error: 'invalid credentials' });
   if (!isUserApproved(user)) return res.status(403).json({ error: 'pending approval' });
   const session = createUserSession(db, user, deviceId, req);
-  await saveDb(db);
+  await db.save();
   res.json(publicSessionUser(user, session));
 });
 
 app.post('/api/session/verify', async (req, res) => {
-  const db = await ensureDb();
+  const db = await initDb(dataDir);
   const result = findValidSession(db, req.body || {}, req);
   if (!result) return res.status(401).json({ error: 'invalid session' });
   result.session.lastSeenAt = new Date().toISOString();
-  await saveDb(db);
+  await db.save();
   res.json(publicSessionUser(result.user, result.session));
 });
 
 app.post('/api/logout', async (req, res) => {
-  const db = await ensureDb();
+  const db = await initDb(dataDir);
   const userId = String(req.body.userId || '').trim();
   const token = String(req.body.sessionToken || req.body.token || '').trim();
   const deviceId = String(req.body.deviceId || '').trim();
-  db.sessions = (db.sessions || []).filter((session) => {
-    return !(session.userId === userId && session.token === token && session.deviceId === deviceId);
-  });
-  await saveDb(db);
+  db.sessions.remove((session) => session.userId === userId && session.token === token && session.deviceId === deviceId);
+  await db.save();
   res.json({ ok: true });
 });
 
 app.post('/api/register', async (req, res) => {
-  const db = await ensureDb();
+  const db = await initDb(dataDir);
   const name = String(req.body.name || '').trim();
   const password = String(req.body.password || '').trim();
   if (!name || !password) return res.status(400).json({ error: 'missing name or password' });
@@ -1281,18 +1164,18 @@ app.post('/api/register', async (req, res) => {
   });
   db.users.push(user);
   pushLog(db, '注册申请', SYSTEM_OWNER_NAME, `${name} 申请注册，等待孙立柱审核。`, '系统管理', '权限管理');
-  await saveDb(db);
+  await db.save();
   res.json(publicUser(user));
 });
 
 app.get('/api/users', async (req, res) => {
-  const db = await ensureDb();
+  const db = await initDb(dataDir);
   if (!requireSystemOwner(db, req, res)) return;
   res.json(db.users.map(publicUser));
 });
 
 app.post('/api/users', async (req, res) => {
-  const db = await ensureDb();
+  const db = await initDb(dataDir);
   if (!requireSystemOwner(db, req, res)) return;
   const name = String(req.body.name || '').trim();
   if (!name) return res.status(400).json({ error: 'missing name' });
@@ -1306,12 +1189,12 @@ app.post('/api/users', async (req, res) => {
     status: USER_STATUS_APPROVED
   });
   db.users.push(user);
-  await saveDb(db);
+  await db.save();
   res.json(publicUser(user));
 });
 
 app.patch('/api/users/:id', async (req, res) => {
-  const db = await ensureDb();
+  const db = await initDb(dataDir);
   const requestUser = requireSystemOwner(db, req, res);
   if (!requestUser) return;
   const target = db.users.find((item) => item.id === req.params.id);
@@ -1334,31 +1217,32 @@ app.patch('/api/users/:id', async (req, res) => {
 
   const normalized = normalizeUser(target);
   Object.assign(target, normalized);
-  await saveDb(db);
+  await db.save();
   res.json(publicUser(target));
 });
 
 app.delete('/api/users/:id', async (req, res) => {
-  const db = await ensureDb();
+  const db = await initDb(dataDir);
   if (!requireSystemOwner(db, req, res)) return;
   const target = db.users.find((item) => item.id === req.params.id);
   if (!target) return res.status(404).json({ error: 'not found' });
   if (target.name === SYSTEM_OWNER_NAME) return res.status(400).json({ error: 'cannot delete system owner' });
 
-  db.users = db.users.filter((item) => item.id !== target.id);
-  db.sessions = (db.sessions || []).filter((session) => session.userId !== target.id);
+  db.users.remove((item) => item.id === target.id);
+  const userSessions = db.sessions.filter((session) => session.userId === target.id);
+  for (const session of userSessions) db.sessions.remove((item) => item.id === session.id);
   pushLog(db, '删除账号', SYSTEM_OWNER_NAME, `${target.name} 账号已删除。`, '系统管理', '权限管理');
-  await saveDb(db);
+  await db.save();
   res.json({ ok: true, id: target.id });
 });
 
 app.get('/api/invoices', async (req, res) => {
-  const db = await ensureDb();
+  const db = await initDb(dataDir);
   res.json(visibleRows(db.invoices, db, req.query));
 });
 
 app.patch('/api/invoices/:id', async (req, res) => {
-  const db = await ensureDb();
+  const db = await initDb(dataDir);
   const requestUser = resolveRequestUser(db, req.body);
   const invoice = db.invoices.find((item) => item.id === req.params.id);
   if (!invoice) return res.status(404).json({ error: 'not found' });
@@ -1386,17 +1270,17 @@ app.patch('/api/invoices/:id', async (req, res) => {
     target: invoice.owner,
     content: `${invoice.supplier} 发票 ${invoice.invoiceNo} 状态更新为：${invoice.status}`
   });
-  await saveDb(db);
+  await db.save();
   res.json(invoice);
 });
 
 app.delete('/api/invoices/:id', async (req, res) => {
-  const db = await ensureDb();
+  const db = await initDb(dataDir);
   const requestUser = requirePermission(db, req, res, 'systemFileLibrary.invoiceInventory');
   if (!requestUser) return;
   const invoice = db.invoices.find((item) => item.id === req.params.id);
   if (!invoice) return res.status(404).json({ error: 'not found' });
-  db.invoices = db.invoices.filter((item) => item.id !== req.params.id);
+  db.invoices.remove((item) => item.id === req.params.id);
   await removeUploadedFile(invoice.fileName);
   db.reminders.unshift({
     id: crypto.randomUUID(),
@@ -1405,17 +1289,17 @@ app.delete('/api/invoices/:id', async (req, res) => {
     target: requestUser.name,
     content: `${requestUser.name} 删除了 ${invoice.supplier} 发票 ${invoice.invoiceNo || invoice.id}。`
   });
-  await saveDb(db);
+  await db.save();
   res.status(204).end();
 });
 
 app.get('/api/drafts', async (req, res) => {
-  const db = await ensureDb();
+  const db = await initDb(dataDir);
   res.json(visibleRows(db.drafts, db, req.query));
 });
 
 app.post('/api/upload', upload.array('files'), async (req, res) => {
-  const db = await ensureDb();
+  const db = await initDb(dataDir);
   const requestUser = resolveRequestUser(db, req.body);
   if (!requestUser) return res.status(401).json({ error: 'invalid user' });
   const user = requestUser.name;
@@ -1452,12 +1336,12 @@ app.post('/api/upload', upload.array('files'), async (req, res) => {
     target: draft.owner,
     content: `${draft.originalName} 已上传，请核对 OCR 识别结果。`
   }));
-  await saveDb(db);
+  await db.save();
   res.json({ created: drafts, duplicates });
 });
 
 app.post('/api/drafts/reprocess', async (req, res) => {
-  const db = await ensureDb();
+  const db = await initDb(dataDir);
   const results = [];
   for (const draft of db.drafts) {
     try {
@@ -1466,12 +1350,12 @@ app.post('/api/drafts/reprocess', async (req, res) => {
       results.push(draft);
     }
   }
-  await saveDb(db);
+  await db.save();
   res.json(results);
 });
 
 app.post('/api/drafts/:id/confirm', async (req, res) => {
-  const db = await ensureDb();
+  const db = await initDb(dataDir);
   const requestUser = resolveRequestUser(db, req.body);
   const index = db.drafts.findIndex((item) => item.id === req.params.id);
   if (index === -1) return res.status(404).json({ error: 'not found' });
@@ -1490,37 +1374,37 @@ app.post('/api/drafts/:id/confirm', async (req, res) => {
     target: invoice.owner,
     content: `${invoice.supplier} 发票 ${invoice.invoiceNo} 请在 ${invoice.dueDate} 前提交 OA 付款申请。`
   });
-  await saveDb(db);
+  await db.save();
   res.json(invoice);
 });
 
 app.delete('/api/drafts/:id', async (req, res) => {
-  const db = await ensureDb();
+  const db = await initDb(dataDir);
   const requestUser = resolveRequestUser(db, req.query);
   const draft = db.drafts.find((item) => item.id === req.params.id);
   if (!draft) return res.status(404).json({ error: 'not found' });
   if (!canAccessRow(draft, requestUser)) return res.status(403).json({ error: 'forbidden' });
-  db.drafts = db.drafts.filter((item) => item.id !== req.params.id);
-  await saveDb(db);
+  db.drafts.remove((item) => item.id === req.params.id);
+  await db.save();
   res.status(204).end();
 });
 
 app.get('/api/suppliers', async (req, res) => {
-  const db = await ensureDb();
+  const db = await initDb(dataDir);
   res.json(db.suppliers);
 });
 
 app.post('/api/suppliers', async (req, res) => {
-  const db = await ensureDb();
+  const db = await initDb(dataDir);
   if (!requirePermission(db, req, res, 'maintenanceLibrary.supplierManagement')) return;
   const supplier = { id: crypto.randomUUID(), name: req.body.name, termDays: Number(req.body.termDays || 30) };
   db.suppliers.unshift(supplier);
-  await saveDb(db);
+  await db.save();
   res.json(supplier);
 });
 
 app.post('/api/suppliers/import-terms', upload.single('file'), async (req, res) => {
-  const db = await ensureDb();
+  const db = await initDb(dataDir);
   if (!req.file) return res.status(400).json({ error: 'missing file' });
   if (!requirePermission(db, req, res, 'maintenanceLibrary.supplierManagement')) {
     await removeUploadedFile(req.file.filename);
@@ -1542,8 +1426,9 @@ app.post('/api/suppliers/import-terms', upload.single('file'), async (req, res) 
       });
     });
 
-    db.suppliers = [...byName.values()];
-    await saveDb(db);
+    db.suppliers.splice(0, db.suppliers.length);
+    for (const supplier of byName.values()) db.suppliers.push(supplier);
+    await db.save();
     res.json({
       sheetName: result.sheetName,
       importedCount: result.imported.length,
@@ -1558,21 +1443,21 @@ app.post('/api/suppliers/import-terms', upload.single('file'), async (req, res) 
 });
 
 app.get('/api/owners', async (req, res) => {
-  const db = await ensureDb();
+  const db = await initDb(dataDir);
   res.json(db.owners);
 });
 
 app.post('/api/owners', async (req, res) => {
-  const db = await ensureDb();
+  const db = await initDb(dataDir);
   if (!requirePermission(db, req, res, 'maintenanceLibrary.supplierManagement')) return;
   const owner = { id: crypto.randomUUID(), owner: req.body.owner, supplier: req.body.supplier };
   db.owners.unshift(owner);
-  await saveDb(db);
+  await db.save();
   res.json(owner);
 });
 
 app.post('/api/owners/import', upload.single('file'), async (req, res) => {
-  const db = await ensureDb();
+  const db = await initDb(dataDir);
   if (!req.file) return res.status(400).json({ error: 'missing file' });
   if (!requirePermission(db, req, res, 'maintenanceLibrary.supplierManagement')) {
     await removeUploadedFile(req.file.filename);
@@ -1592,8 +1477,9 @@ app.post('/api/owners/import', upload.single('file'), async (req, res) => {
       });
     });
 
-    db.owners = [...bySupplier.values()];
-    await saveDb(db);
+    db.owners.splice(0, db.owners.length);
+    for (const owner of bySupplier.values()) db.owners.push(owner);
+    await db.save();
     res.json({
       sheetName: result.sheetName,
       importedCount: result.imported.length,
@@ -1608,13 +1494,13 @@ app.post('/api/owners/import', upload.single('file'), async (req, res) => {
 });
 
 app.get('/api/quality-inspection/initial-data', async (req, res) => {
-  const db = await ensureDb();
+  const db = await initDb(dataDir);
   if (!requirePermission(db, req, res, 'qualityInspection.inspectionInitialData')) return;
   res.json(db.qualityInspection.initialData);
 });
 
 app.post('/api/quality-inspection/initial-data/import', upload.single('file'), async (req, res) => {
-  const db = await ensureDb();
+  const db = await initDb(dataDir);
   if (!req.file) return res.status(400).json({ error: 'missing file' });
   if (!requirePermission(db, req, res, 'qualityInspection.inspectionInitialData')) {
     await removeUploadedFile(req.file.filename);
@@ -1629,7 +1515,7 @@ app.post('/api/quality-inspection/initial-data/import', upload.single('file'), a
       rows: result.rows,
       updatedAt: format(new Date(), 'yyyy-MM-dd HH:mm:ss')
     };
-    await saveDb(db);
+    await db.save();
     res.json({
       ...db.qualityInspection.initialData,
       importedCount: result.importedCount
@@ -1640,13 +1526,13 @@ app.post('/api/quality-inspection/initial-data/import', upload.single('file'), a
 });
 
 app.get('/api/quality-inspection/notices', async (req, res) => {
-  const db = await ensureDb();
+  const db = await initDb(dataDir);
   if (!requirePermission(db, req, res, 'qualityInspection.inspectionNotice')) return;
   res.json(db.qualityInspection.notices);
 });
 
 app.post('/api/quality-inspection/notices', async (req, res) => {
-  const db = await ensureDb();
+  const db = await initDb(dataDir);
   const requestUser = requirePermission(db, req, res, 'qualityInspection.inspectionNotice');
   if (!requestUser) return;
   const rows = Array.isArray(req.body.rows) ? req.body.rows : [];
@@ -1660,19 +1546,19 @@ app.post('/api/quality-inspection/notices', async (req, res) => {
     submittedBy: requestUser.name
   };
   pushLog(db, '验货通知提交', requestUser.name, `${requestUser.name} 提交验货通知 ${rows.length} 条。`);
-  await saveDb(db);
+  await db.save();
   res.json(db.qualityInspection.notices);
 });
 
 app.get('/api/reminders', async (req, res) => {
-  const db = await ensureDb();
+  const db = await initDb(dataDir);
   const requestUser = resolveRequestUser(db, req.query);
   if (canSeeAllRole(requestUser?.role)) return res.json(db.reminders);
   res.json(db.reminders.filter((item) => item.target === requestUser?.name));
 });
 
 app.get('/api/reminders/weekly-payment-preview', async (req, res) => {
-  const db = await ensureDb();
+  const db = await initDb(dataDir);
   const { start, end, rows } = weeklyPaymentApplications(db, new Date());
   res.json({
     start: format(start, 'yyyy-MM-dd'),
@@ -1694,13 +1580,13 @@ app.get('/api/reminders/weekly-payment-preview', async (req, res) => {
 });
 
 app.get('/api/settings', async (req, res) => {
-  const db = await ensureDb();
+  const db = await initDb(dataDir);
   const requestUser = resolveRequestUser(db, req.query);
   res.json(publicSettingsForUser(db.settings, requestUser));
 });
 
 app.patch('/api/settings', async (req, res) => {
-  const db = await ensureDb();
+  const db = await initDb(dataDir);
   const requestUser = requireSystemOwner(db, req, res);
   if (!requestUser) return;
   db.settings.senderEmail = String(req.body.senderEmail || '').trim();
@@ -1708,7 +1594,7 @@ app.patch('/api/settings', async (req, res) => {
     const smtpPassword = String(req.body.smtpPassword || '').trim();
     if (smtpPassword) db.settings.smtpPassword = smtpPassword;
   }
-  await saveDb(db);
+  await db.save();
   res.json(publicSettingsForUser(db.settings, requestUser));
 });
 
@@ -1862,7 +1748,7 @@ async function ensureKcfxRecordRows(db, id, record = {}) {
     }, id);
     db.kcfxLibrary.records[id] = parsedRecord;
     db.kcfxLibrary.savedAt = new Date().toISOString();
-    await saveDb(db);
+    await db.save();
     return parsedRecord;
   } catch (error) {
     return {
@@ -1898,7 +1784,7 @@ async function externalizeKcfxLibraryInlineRows(db) {
   }
   if (changed) {
     db.kcfxLibrary.savedAt = new Date().toISOString();
-    await saveDb(db);
+    await db.save();
   }
   return changed;
 }
@@ -2029,7 +1915,7 @@ function normalizeKcfxIds(idsParam) {
 }
 
 async function buildPreloadedKcfxLibrary(db = null, options = {}) {
-  const database = db || await ensureDb();
+  const database = db || await initDb(dataDir);
   await externalizeKcfxLibraryInlineRows(database);
   const manifest = publicKcfxLibrary(database);
   const targetIds = options.targetIds || null;
@@ -2137,7 +2023,7 @@ function stripKcfxTrendRecord(record = null) {
 }
 
 async function buildKcfxTrendSummary() {
-  const db = await ensureDb();
+  const db = await initDb(dataDir);
   const records = {};
   for (const id of KCFX_TREND_RECORD_IDS) {
     records[id] = await getKcfxTrendRecord(db, id);
@@ -2235,7 +2121,7 @@ function scheduleKcfxTrendSummaryRefresh() {
 }
 
 async function getKcfxTrendSummaryResponse() {
-  const db = await ensureDb();
+  const db = await initDb(dataDir);
   const cache = await readKcfxTrendSummaryCache();
   if (isKcfxTrendSummaryFresh(cache, db)) return cache;
   scheduleKcfxTrendSummaryRefresh();
@@ -2331,7 +2217,7 @@ function compactKcfxReceiptSummaryRows(rows) {
 }
 
 async function buildKcfxReceiptSummary(db = null) {
-  const database = db || await ensureDb();
+  const database = db || await initDb(dataDir);
   await externalizeKcfxLibraryInlineRows(database);
   const records = {};
   for (const id of KCFX_RECEIPT_RECORD_IDS) {
@@ -2377,7 +2263,7 @@ function scheduleKcfxReceiptSummaryRefresh(db = null) {
 }
 
 async function getKcfxReceiptSummaryResponse() {
-  const db = await ensureDb();
+  const db = await initDb(dataDir);
   const cache = await readKcfxReceiptSummaryCache();
   if (isKcfxReceiptSummaryFresh(cache, db)) return cache;
   if (cache?.ok) {
@@ -3306,7 +3192,7 @@ function scheduleKcfxFileParse(job) {
 
 async function parseKcfxStoredFile({ id, slot, file, storedFile, previousRecord, requestUserName }) {
   const parseStartedAt = new Date().toISOString();
-  let db = await ensureDb();
+  let db = await initDb(dataDir);
   const currentRecord = db.kcfxLibrary.records[id];
   if (!currentRecord || currentRecord.serverFilePath !== storedFile.relativePath) return;
   db.kcfxLibrary.records[id] = {
@@ -3316,13 +3202,13 @@ async function parseKcfxStoredFile({ id, slot, file, storedFile, previousRecord,
     parseError: ''
   };
   db.kcfxLibrary.savedAt = parseStartedAt;
-  await saveDb(db);
+  await db.save();
 
   try {
     const parsed = parseKcfxWorkbookFile(storedFile.fullPath, slot);
     if (!parsed.rows.length) throw new Error('file parsed no valid rows');
     const record = await externalizeKcfxRecordRows(buildKcfxFileRecord(file, storedFile, slot, parsed), id);
-    db = await ensureDb();
+    db = await initDb(dataDir);
     const latestRecord = db.kcfxLibrary.records[id];
     if (!latestRecord || latestRecord.serverFilePath !== storedFile.relativePath) return;
     db.kcfxLibrary.records[id] = {
@@ -3335,12 +3221,12 @@ async function parseKcfxStoredFile({ id, slot, file, storedFile, previousRecord,
     db.kcfxLibrary.savedAt = new Date().toISOString();
     await removeKcfxStoredFile(previousRecord);
     pushLog(db, 'kcfx file library parsed', requestUserName, `${requestUserName} uploaded and parsed ${record.title || id}`);
-    await saveDb(db);
+    await db.save();
     scheduleKcfxPreloadRefresh(db);
     scheduleKcfxReceiptSummaryRefresh(db);
     scheduleKcfxTrendSummaryRefresh();
   } catch (error) {
-    db = await ensureDb();
+    db = await initDb(dataDir);
     const latestRecord = db.kcfxLibrary.records[id];
     if (!latestRecord || latestRecord.serverFilePath !== storedFile.relativePath) return;
     db.kcfxLibrary.records[id] = {
@@ -3352,7 +3238,7 @@ async function parseKcfxStoredFile({ id, slot, file, storedFile, previousRecord,
     };
     db.kcfxLibrary.savedAt = new Date().toISOString();
     pushLog(db, 'kcfx file library parse failed', requestUserName, `${requestUserName} uploaded ${latestRecord.title || id}, background parse failed`);
-    await saveDb(db);
+    await db.save();
     scheduleKcfxPreloadRefresh(db);
     scheduleKcfxReceiptSummaryRefresh(db);
     scheduleKcfxTrendSummaryRefresh();
@@ -3360,7 +3246,7 @@ async function parseKcfxStoredFile({ id, slot, file, storedFile, previousRecord,
 }
 
 app.get('/api/kcfx-library', async (req, res) => {
-  const db = await ensureDb();
+  const db = await initDb(dataDir);
   await externalizeKcfxLibraryInlineRows(db);
   res.json(publicKcfxLibrary(db, { includeRows: req.query.includeRows === '1' }));
 });
@@ -3433,7 +3319,7 @@ app.get('/api/kcfx-library/trend-summary', async (req, res) => {
 });
 
 app.get('/api/kcfx-library/records/:id', async (req, res) => {
-  const db = await ensureDb();
+  const db = await initDb(dataDir);
   const id = String(req.params.id || '').trim();
   let record = db.kcfxLibrary.records[id] || await recoverKcfxRecordFromRowsFile(id);
   if (!record) return res.status(404).json({ error: 'record not found' });
@@ -3442,13 +3328,13 @@ app.get('/api/kcfx-library/records/:id', async (req, res) => {
     record = await externalizeKcfxRecordRows(record, id);
     db.kcfxLibrary.records[id] = record;
     db.kcfxLibrary.savedAt = new Date().toISOString();
-    await saveDb(db);
+    await db.save();
   }
   res.json({ ok: true, record: await attachKcfxRecordRows(record) });
 });
 
 app.post('/api/kcfx-library/records/:id/upload', upload.single('file'), async (req, res) => {
-  const db = await ensureDb();
+  const db = await initDb(dataDir);
   const requestUser = requireSystemOwner(db, req, res);
   if (!requestUser) {
     if (req.file) await removeUploadedFile(req.file.filename);
@@ -3482,7 +3368,7 @@ app.post('/api/kcfx-library/records/:id/upload', upload.single('file'), async (r
       db.kcfxLibrary.savedAt = new Date().toISOString();
       await removeKcfxStoredFile(previousRecord);
       pushLog(db, 'kcfx file library uploaded', requestUser.name, `${requestUser.name} uploaded browser-parsed ${record.title || id}`);
-      await saveDb(db);
+      await db.save();
       scheduleKcfxPreloadRefresh(db);
       scheduleKcfxReceiptSummaryRefresh(db);
       scheduleKcfxTrendSummaryRefresh();
@@ -3492,7 +3378,7 @@ app.post('/api/kcfx-library/records/:id/upload', upload.single('file'), async (r
     db.kcfxLibrary.records[id] = queuedRecord;
     db.kcfxLibrary.savedAt = new Date().toISOString();
     pushLog(db, 'kcfx file library uploaded', requestUser.name, `${requestUser.name} uploaded ${queuedRecord.title || id}, background parse queued`);
-    await saveDb(db);
+    await db.save();
     res.status(202).json({ ok: true, queued: true, library: publicKcfxLibrary(db), record: db.kcfxLibrary.records[id] });
     scheduleKcfxFileParse({
       id,
@@ -3519,7 +3405,7 @@ app.post('/api/kcfx-library/records/:id/upload', upload.single('file'), async (r
 });
 
 app.put('/api/kcfx-library/records/:id', async (req, res) => {
-  const db = await ensureDb();
+  const db = await initDb(dataDir);
   const requestUser = requireSystemOwner(db, req, res);
   if (!requestUser) return;
   const id = String(req.params.id || '').trim();
@@ -3532,7 +3418,7 @@ app.put('/api/kcfx-library/records/:id', async (req, res) => {
   };
   db.kcfxLibrary.savedAt = new Date().toISOString();
   pushLog(db, '文件库更新', requestUser.name, `${requestUser.name} 更新销售及库存看板文件库：${record.title || id}`);
-  await saveDb(db);
+  await db.save();
   scheduleKcfxPreloadRefresh(db);
   scheduleKcfxReceiptSummaryRefresh(db);
   scheduleKcfxTrendSummaryRefresh();
@@ -3540,7 +3426,7 @@ app.put('/api/kcfx-library/records/:id', async (req, res) => {
 });
 
 app.delete('/api/kcfx-library/records/:id', async (req, res) => {
-  const db = await ensureDb();
+  const db = await initDb(dataDir);
   const requestUser = requireSystemOwner(db, req, res);
   if (!requestUser) return;
   const id = String(req.params.id || '').trim();
@@ -3550,7 +3436,7 @@ app.delete('/api/kcfx-library/records/:id', async (req, res) => {
   delete db.kcfxLibrary.records[id];
   db.kcfxLibrary.savedAt = new Date().toISOString();
   pushLog(db, '文件库删除', requestUser.name, `${requestUser.name} 删除销售及库存看板文件库：${id}`);
-  await saveDb(db);
+  await db.save();
   scheduleKcfxPreloadRefresh(db);
   scheduleKcfxReceiptSummaryRefresh(db);
   scheduleKcfxTrendSummaryRefresh();
@@ -3558,7 +3444,7 @@ app.delete('/api/kcfx-library/records/:id', async (req, res) => {
 });
 
 app.get('/api/system-file-library', async (req, res) => {
-  const db = await ensureDb();
+  const db = await initDb(dataDir);
   const requestUser = requireSystemOwner(db, req, res);
   if (!requestUser) return;
   const packages = await Promise.all(SYSTEM_FILE_PACKAGES.map(async (item) => ({
@@ -3569,7 +3455,7 @@ app.get('/api/system-file-library', async (req, res) => {
 });
 
 app.get('/api/system-file-library/:id/download', async (req, res) => {
-  const db = await ensureDb();
+  const db = await initDb(dataDir);
   const requestUser = requireSystemOwner(db, req, res);
   if (!requestUser) return;
   const packageInfo = SYSTEM_FILE_PACKAGES.find((item) => item.id === req.params.id);
@@ -3593,7 +3479,7 @@ app.get(/^\/(?!api|uploads|preview|download).*/, (req, res) => {
 
 const port = process.env.PORT || 4001;
 app.listen(port, async () => {
-  const db = await ensureDb();
+  const db = await initDb(dataDir);
   scheduleKcfxPreloadRefresh(db);
   scheduleKcfxReceiptSummaryRefresh(db);
   scheduleKcfxTrendSummaryRefresh();

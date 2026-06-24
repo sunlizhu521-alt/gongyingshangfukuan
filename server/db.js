@@ -233,14 +233,18 @@ export async function initDb(dataDir) {
   if (!sqliteExists && await fileExists(jsonPath)) {
     const legacyDb = JSON.parse(await readFile(jsonPath, 'utf8'));
     migrateJson(database, legacyDb);
+    await saveDatabase(database, sqlitePath);
     await backupJson(jsonPath);
   } else {
     ensureQualityInspectionRow(database);
   }
 
-  const context = { database, sqlitePath };
+  const context = { database, sqlitePath, arrayStores: [] };
   const db = {
-    save: async () => saveDatabase(database, sqlitePath)
+    save: async () => {
+      flushArrayStores(context);
+      await saveDatabase(database, sqlitePath);
+    }
   };
 
   for (const [name, config] of Object.entries(ARRAY_TABLES)) {
@@ -311,6 +315,7 @@ async function backupJson(jsonPath) {
 
 function createArrayProxy(context, config) {
   const cache = loadArrayRows(context.database, config);
+  context.arrayStores.push({ config, cache });
   const mutatingMethods = new Set(['push', 'splice', 'remove', 'update']);
   const readonlyMethods = new Set(['find', 'filter', 'map', 'some', 'findIndex', 'forEach', 'reduce', 'slice']);
 
@@ -368,6 +373,22 @@ function createArrayProxy(context, config) {
       return true;
     }
   });
+}
+
+function flushArrayStores(context) {
+  context.database.run('BEGIN TRANSACTION');
+  try {
+    for (const { config, cache } of context.arrayStores) {
+      context.database.run(`DELETE FROM ${config.table}`);
+      for (const item of cache) {
+        upsertArrayRow(context.database, config, item);
+      }
+    }
+    context.database.run('COMMIT');
+  } catch (error) {
+    context.database.run('ROLLBACK');
+    throw error;
+  }
 }
 
 function loadArrayRows(database, config) {
