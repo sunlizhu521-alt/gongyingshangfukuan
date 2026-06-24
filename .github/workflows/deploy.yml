@@ -16,7 +16,7 @@ jobs:
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'EOF'
             set -e
             cd /home/ubuntu/zhuge-ai-lab/gongyingaixitong
-            git fetch origin main
+            git fetch
             git reset --hard origin/main
             npm ci
             npm run build
