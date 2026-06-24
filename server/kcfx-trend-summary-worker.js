@@ -1,10 +1,10 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { initDb } from './db.js';
 
 const [dataDirArg, outputPathArg] = process.argv.slice(2);
 const dataDir = path.resolve(dataDirArg || 'data');
 const outputPath = path.resolve(outputPathArg || path.join(dataDir, 'kcfx-trend-summary.json'));
-const dbPath = path.join(dataDir, 'db.json');
 
 const TREND_MONTHS = [
   { id: 'fact-3', label: 'M1' },
@@ -39,7 +39,7 @@ async function readJson(filePath, fallback = null) {
 }
 
 async function loadRecord(db, id) {
-  const record = db.kcfxLibrary?.records?.[id] || { id };
+  const record = db.kcfxLibrary.records[id] || { id };
   const rowsPath = record.rowsPath
     ? path.join(dataDir, record.rowsPath)
     : rowsPathFor(id);
@@ -257,7 +257,7 @@ function summarizeMonth(month, record, maps) {
 }
 
 async function main() {
-  const db = await readJson(dbPath, {});
+  const db = await initDb(dataDir);
   const records = {};
   for (const id of REQUIRED_IDS) {
     records[id] = await loadRecord(db, id);
@@ -268,7 +268,7 @@ async function main() {
     ok: true,
     status: 'ready',
     source: 'server-trend-summary',
-    savedAt: db.kcfxLibrary?.savedAt || '',
+    savedAt: db.kcfxLibrary.savedAt || '',
     generatedAt: new Date().toISOString(),
     monthSummaries,
     records: Object.fromEntries(Object.entries(records).map(([id, record]) => [id, stripRows(record)]))
