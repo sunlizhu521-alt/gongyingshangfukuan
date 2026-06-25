@@ -1768,6 +1768,9 @@ function App() {
             supplierStats={supplierStats}
             supplierImportResult={supplierImportResult}
             ownerImportResult={ownerImportResult}
+            ownerOptions={ownerOptions}
+            ownerFilter={ownerFilter}
+            setOwnerFilter={setOwnerFilter}
             uploadSupplierTerms={uploadSupplierTerms}
             uploadOwners={uploadOwners}
             downloadImportResult={downloadImportResult}
@@ -1789,6 +1792,7 @@ function App() {
             setSupplierFilter={setSupplierFilter}
             supplierOptions={supplierOptions}
             addSupplier={addSupplier}
+            addOwner={addOwner}
           />
         )}
 
