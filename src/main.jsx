@@ -6,6 +6,7 @@ import {
   EMBEDDED_KCFX_PAGES,
   INSPECTION_LIBRARY_RECORD_IDS,
   INSPECTION_NOTICE_FIELDS,
+  KCFX_ERROR_RECORD_IDS,
   MAINTENANCE_LIBRARY_PAGES,
   MAINTENANCE_LIBRARY_TABS,
   PRIORITY_KCFX_PRELOAD_TABS,
@@ -45,6 +46,7 @@ import PreviewModal from './components/PreviewModal.jsx';
 import EmbeddedDashboard from './components/EmbeddedDashboard.jsx';
 import InvoiceManagementPage from './components/InvoiceManagementPage.jsx';
 import AuthPage from './components/AuthPage.jsx';
+import ErrorsPage from './components/ErrorsPage.jsx';
 import './styles.css';
 
 function App() {
@@ -76,6 +78,10 @@ function App() {
   const [embeddedFrameReady, setEmbeddedFrameReady] = useState({});
   const [embeddedSwitchingTab, setEmbeddedSwitchingTab] = useState('');
   const [embeddedLoadProgress, setEmbeddedLoadProgress] = useState({});
+  const [kcfxErrorRecords, setKcfxErrorRecords] = useState({});
+  const [kcfxErrorLoading, setKcfxErrorLoading] = useState(false);
+  const [kcfxErrorMessage, setKcfxErrorMessage] = useState('');
+  const [kcfxErrorLoadedAt, setKcfxErrorLoadedAt] = useState('');
   const [mountedKcfxTabs, setMountedKcfxTabs] = useState(() => new Set());
   const [supplierImportResult, setSupplierImportResult] = useState(null);
   const [ownerImportResult, setOwnerImportResult] = useState(null);
@@ -261,6 +267,25 @@ function App() {
     return `/kcfx/${page.sourceFile}?embed=1&v=20260622d`;
   }
 
+  async function loadKcfxErrorRecords() {
+    setKcfxErrorLoading(true);
+    setKcfxErrorMessage('');
+    try {
+      const response = await fetch(`${API}/api/kcfx-library?includeRows=1`, { cache: 'no-store' });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const payload = await response.json();
+      const records = Object.fromEntries(
+        KCFX_ERROR_RECORD_IDS.map((id) => [id, payload.records?.[id] || { id, rows: [] }])
+      );
+      setKcfxErrorRecords(records);
+      setKcfxErrorLoadedAt(new Date().toLocaleString('zh-CN'));
+    } catch (error) {
+      setKcfxErrorMessage(error?.message || String(error));
+    } finally {
+      setKcfxErrorLoading(false);
+    }
+  }
+
   async function hydrateInspectionLibraryRecords(records = {}) {
     const nextRecords = { ...records };
     const missingIds = INSPECTION_LIBRARY_RECORD_IDS.filter((id) => {
@@ -410,6 +435,12 @@ function App() {
     fetch(`${API}/api/kcfx-library/preloaded?ids=${encodeURIComponent(ids)}`, { cache: 'no-store' }).catch(() => {});
     fetch(`${API}/api/kcfx-library/receipt-summary`, { cache: 'no-store' }).catch(() => {});
   }, [authChecked, user, accessibleEmbeddedKcfxPages.length]);
+
+  useEffect(() => {
+    if (!authChecked || !user || activeTab !== 'salesInventoryErrors' || !canAccessTab('salesInventoryErrors')) return undefined;
+    loadKcfxErrorRecords();
+    return undefined;
+  }, [activeTab, authChecked, user]);
 
   useEffect(() => {
     if (!authChecked || !user || accessibleEmbeddedKcfxPages.length === 0) return undefined;
@@ -1696,6 +1727,16 @@ function App() {
             deleteInspectionNoticeRow={deleteInspectionNoticeRow}
             addInspectionNoticeRow={addInspectionNoticeRow}
             confirmInspectionNotice={confirmInspectionNotice}
+          />
+        )}
+
+        {activeTab === 'salesInventoryErrors' && canAccessTab('salesInventoryErrors') && (
+          <ErrorsPage
+            kcfxRecords={kcfxErrorRecords}
+            loading={kcfxErrorLoading}
+            error={kcfxErrorMessage}
+            lastLoadedAt={kcfxErrorLoadedAt}
+            onRefresh={loadKcfxErrorRecords}
           />
         )}
 

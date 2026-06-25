@@ -854,6 +854,139 @@ th {
   font-size: 28px;
 }
 
+.errors-page {
+  display: grid;
+  gap: 18px;
+}
+
+.errors-heading {
+  align-items: flex-start;
+  padding: 18px;
+  border: 1px solid #dbe3ee;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #f8fbff 0%, #eef6ff 100%);
+}
+
+.errors-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.error-source-panel {
+  padding: 16px;
+  border: 1px solid #c9d8e5;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #f8fbfe 0%, #eef5fa 100%);
+}
+
+.error-source-title {
+  margin: 0 0 12px;
+  padding: 14px 16px;
+  border: 1px solid #dbe3ee;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.error-source-title h2 {
+  margin: 0 0 6px;
+  font-size: 18px;
+}
+
+.error-source-title p {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.error-metrics {
+  grid-template-columns: repeat(5, minmax(140px, 1fr));
+}
+
+.error-metrics .metric-card {
+  min-height: 86px;
+}
+
+.error-metrics .metric-card span {
+  font-size: 13px;
+}
+
+.error-section {
+  margin-top: 14px;
+}
+
+.table-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.table-title {
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.compact-button {
+  padding: 6px 10px;
+  min-height: 0;
+}
+
+.diagnostic-panel {
+  display: none;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1e3a8a;
+  font-size: 12px;
+}
+
+.diagnostic-panel.show {
+  display: grid;
+}
+
+.error-table-panel {
+  max-height: 360px;
+  overflow: auto;
+}
+
+.error-table-panel table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.error-table-panel th,
+.error-table-panel td {
+  border: 1px solid #dbe3ee;
+  padding: 8px 10px;
+  text-align: center;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.error-table-panel th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f8fafc;
+  color: #334155;
+}
+
+.error-table-panel td.num {
+  text-align: right;
+}
+
+.error-table-panel .empty {
+  color: #64748b;
+  text-align: center;
+}
+
 .ledger-metric-grid {
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
 }
