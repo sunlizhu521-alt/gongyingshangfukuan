@@ -154,41 +154,6 @@ app.get('/api/kcfx-library/trend-summary', async (req, res) => {
   }
 });
 
-app.get('/api/kcfx-library/records', async (req, res) => {
-  const db = await initDb(dataDir);
-  const targetIds = normalizeKcfxIds(req.query.ids);
-  const ids = targetIds ? [...targetIds] : [];
-  const records = [];
-  const failedIds = [];
-  let changed = false;
-
-  for (const id of ids) {
-    try {
-      let record = db.kcfxLibrary.records[id] || await recoverKcfxRecordFromRowsFile(id);
-      if (!record) {
-        failedIds.push(id);
-        continue;
-      }
-      record = await ensureKcfxRecordRows(db, id, record);
-      if (Array.isArray(record.rows)) {
-        record = await externalizeKcfxRecordRows(record, id);
-        db.kcfxLibrary.records[id] = record;
-        changed = true;
-      }
-      records.push(await attachKcfxRecordRows(record));
-    } catch {
-      failedIds.push(id);
-    }
-  }
-
-  if (changed) {
-    db.kcfxLibrary.savedAt = new Date().toISOString();
-    await db.save();
-  }
-
-  res.json({ ok: true, records, failedIds });
-});
-
 app.get('/api/kcfx-library/records/:id', async (req, res) => {
   const db = await initDb(dataDir);
   const id = String(req.params.id || '').trim();
