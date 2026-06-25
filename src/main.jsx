@@ -7,6 +7,7 @@ import {
   INSPECTION_LIBRARY_RECORD_IDS,
   INSPECTION_NOTICE_FIELDS,
   KCFX_ERROR_RECORD_IDS,
+  KCFX_SALES_TREND_RECORD_IDS,
   MAINTENANCE_LIBRARY_PAGES,
   MAINTENANCE_LIBRARY_TABS,
   PRIORITY_KCFX_PRELOAD_TABS,
@@ -47,6 +48,7 @@ import EmbeddedDashboard from './components/EmbeddedDashboard.jsx';
 import InvoiceManagementPage from './components/InvoiceManagementPage.jsx';
 import AuthPage from './components/AuthPage.jsx';
 import ErrorsPage from './components/ErrorsPage.jsx';
+import SalesTrendPage from './components/SalesTrendPage.jsx';
 import './styles.css';
 
 function App() {
@@ -82,6 +84,10 @@ function App() {
   const [kcfxErrorLoading, setKcfxErrorLoading] = useState(false);
   const [kcfxErrorMessage, setKcfxErrorMessage] = useState('');
   const [kcfxErrorLoadedAt, setKcfxErrorLoadedAt] = useState('');
+  const [kcfxSalesTrendRecords, setKcfxSalesTrendRecords] = useState({});
+  const [kcfxSalesTrendLoading, setKcfxSalesTrendLoading] = useState(false);
+  const [kcfxSalesTrendMessage, setKcfxSalesTrendMessage] = useState('');
+  const [kcfxSalesTrendLoadedAt, setKcfxSalesTrendLoadedAt] = useState('');
   const [mountedKcfxTabs, setMountedKcfxTabs] = useState(() => new Set());
   const [supplierImportResult, setSupplierImportResult] = useState(null);
   const [ownerImportResult, setOwnerImportResult] = useState(null);
@@ -286,6 +292,26 @@ function App() {
     }
   }
 
+  async function loadKcfxSalesTrendRecords() {
+    setKcfxSalesTrendLoading(true);
+    setKcfxSalesTrendMessage('');
+    try {
+      const ids = KCFX_SALES_TREND_RECORD_IDS.join(',');
+      const response = await fetch(`${API}/api/kcfx-library/preloaded?ids=${encodeURIComponent(ids)}`, { cache: 'no-store' });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const payload = await response.json();
+      const records = Object.fromEntries(
+        KCFX_SALES_TREND_RECORD_IDS.map((id) => [id, payload.records?.[id] || { id, rows: [] }])
+      );
+      setKcfxSalesTrendRecords(records);
+      setKcfxSalesTrendLoadedAt(new Date().toLocaleString('zh-CN'));
+    } catch (error) {
+      setKcfxSalesTrendMessage(error?.message || String(error));
+    } finally {
+      setKcfxSalesTrendLoading(false);
+    }
+  }
+
   async function hydrateInspectionLibraryRecords(records = {}) {
     const nextRecords = { ...records };
     const missingIds = INSPECTION_LIBRARY_RECORD_IDS.filter((id) => {
@@ -439,6 +465,12 @@ function App() {
   useEffect(() => {
     if (!authChecked || !user || activeTab !== 'salesInventoryErrors' || !canAccessTab('salesInventoryErrors')) return undefined;
     loadKcfxErrorRecords();
+    return undefined;
+  }, [activeTab, authChecked, user]);
+
+  useEffect(() => {
+    if (!authChecked || !user || activeTab !== 'salesInventorySalesTrend' || !canAccessTab('salesInventorySalesTrend')) return undefined;
+    loadKcfxSalesTrendRecords();
     return undefined;
   }, [activeTab, authChecked, user]);
 
@@ -1737,6 +1769,16 @@ function App() {
             error={kcfxErrorMessage}
             lastLoadedAt={kcfxErrorLoadedAt}
             onRefresh={loadKcfxErrorRecords}
+          />
+        )}
+
+        {activeTab === 'salesInventorySalesTrend' && canAccessTab('salesInventorySalesTrend') && (
+          <SalesTrendPage
+            kcfxRecords={kcfxSalesTrendRecords}
+            loading={kcfxSalesTrendLoading}
+            error={kcfxSalesTrendMessage}
+            lastLoadedAt={kcfxSalesTrendLoadedAt}
+            onRefresh={loadKcfxSalesTrendRecords}
           />
         )}
 
