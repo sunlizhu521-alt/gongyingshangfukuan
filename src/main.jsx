@@ -1292,7 +1292,7 @@ function App() {
             };
             if (field === 'salesProductLine') {
               const allowedSeries = new Set((inspectionSeriesByProductLine.get(value) || []));
-              nextRow.series = allowedSeries.has(row.series) ? row.series : '';
+              nextRow.series = normalizeOptionText(row.series) === '其他' || allowedSeries.has(row.series) ? row.series : '';
             }
             return nextRow;
           })()

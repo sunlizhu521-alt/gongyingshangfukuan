@@ -137,7 +137,7 @@ export default function InspectionNoticePage({
                 : field.key === 'salesProductLine'
                   ? inspectionProductLineOptions
                   : field.key === 'series'
-                    ? inspectionSeriesOptionsForProductLine(row.salesProductLine)
+                    ? appendOtherOption(inspectionSeriesOptionsForProductLine(row.salesProductLine))
                     : (field.options || []).map((option) => ({ value: option, label: option }));
               const hasCurrentValue = field.key !== 'supplierShortName' && row[field.key] && !baseOptions.some((option) => option.value === row[field.key]);
               const options = hasCurrentValue
@@ -180,4 +180,10 @@ export default function InspectionNoticePage({
       />
     </>
   );
+}
+
+function appendOtherOption(options) {
+  return options.some((option) => option.value === '其他')
+    ? options
+    : [...options, { value: '其他', label: '其他' }];
 }
