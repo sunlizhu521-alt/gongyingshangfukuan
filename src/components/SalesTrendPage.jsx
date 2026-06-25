@@ -18,6 +18,7 @@ const TREND_FILTERS = [
 const EMPTY_SELECTIONS = Object.fromEntries(TREND_FILTERS.map((filter) => [filter.id, []]));
 
 export default function SalesTrendPage({
+  kcfxData = null,
   kcfxRecords = {},
   loading = false,
   error = '',
@@ -27,7 +28,8 @@ export default function SalesTrendPage({
   const [openFilter, setOpenFilter] = useState('');
   const [selections, setSelections] = useState(EMPTY_SELECTIONS);
 
-  const salesData = useMemo(() => buildSalesRows(kcfxRecords), [kcfxRecords]);
+  const records = useMemo(() => kcfxData?.records || kcfxRecords || {}, [kcfxData, kcfxRecords]);
+  const salesData = useMemo(() => buildSalesRows(records), [records]);
   const trendRows = useMemo(() => (
     salesData.rows
       .filter((row) => TREND_YEARS.includes(row.salesYear) && row.salesMonthNumber)
@@ -144,10 +146,10 @@ export default function SalesTrendPage({
       </section>
 
       <section className="data-source-panel sales-trend-source-panel">
-        <div><strong>销售数据文件</strong>：{recordSourceText(kcfxRecords['sales-data'])}</div>
-        <div><strong>商品分类维表</strong>：{recordSourceText(kcfxRecords['dim-product'])}</div>
-        <div><strong>客户与物料对照表</strong>：{recordSourceText(kcfxRecords['dim-store-name'])}；销售数据文件 L 列匹配维表 D 列，取维表 E 列作为销售部门</div>
-        <div><strong>店铺名称汇总（金蝶&领星&简称）</strong>：{recordSourceText(kcfxRecords['dim-customer-material'])}</div>
+        <div><strong>销售数据文件</strong>：{recordSourceText(records['sales-data'])}</div>
+        <div><strong>商品分类维表</strong>：{recordSourceText(records['dim-product'])}</div>
+        <div><strong>客户与物料对照表</strong>：{recordSourceText(records['dim-store-name'])}；销售数据文件 L 列匹配维表 D 列，取维表 E 列作为销售部门</div>
+        <div><strong>店铺名称汇总（金蝶&领星&简称）</strong>：{recordSourceText(records['dim-customer-material'])}</div>
       </section>
     </section>
   );
@@ -275,7 +277,7 @@ function buildSalesRows(records) {
 }
 
 function buildPageStatus({ loading, error, salesData, trendRows, lastLoadedAt }) {
-  if (loading) return '正在读取销售数据文件...';
+  if (loading) return '数据加载中...';
   if (error) return `读取失败：${error}`;
   if (salesData.message) return salesData.message;
   const loadedText = lastLoadedAt ? `；读取时间：${lastLoadedAt}` : '';

@@ -69,6 +69,7 @@ const ERROR_DOWNLOAD_CONFIG = {
 };
 
 export default function ErrorsPage({
+  kcfxData = null,
   kcfxRecords = {},
   loading = false,
   error = '',
@@ -76,21 +77,22 @@ export default function ErrorsPage({
   onRefresh
 }) {
   const [downloadMessage, setDownloadMessage] = useState('');
+  const records = useMemo(() => kcfxData?.records || kcfxRecords || {}, [kcfxData, kcfxRecords]);
 
   const checks = useMemo(() => {
-    if (!kcfxRecords || Object.keys(kcfxRecords).length === 0) return EMPTY_TABLES;
-    const maps = buildDimensionMaps(kcfxRecords);
+    if (!records || Object.keys(records).length === 0) return EMPTY_TABLES;
+    const maps = buildDimensionMaps(records);
     return {
-      closed: buildClosedInventoryChecks(kcfxRecords, maps),
-      detail: buildInventoryMonthChecks(kcfxRecords, maps),
-      sales: buildSalesDataChecks(kcfxRecords, maps)
+      closed: buildClosedInventoryChecks(records, maps),
+      detail: buildInventoryMonthChecks(records, maps),
+      sales: buildSalesDataChecks(records, maps)
     };
-  }, [kcfxRecords]);
+  }, [records]);
 
   const statusText = useMemo(() => {
-    if (loading) return '正在读取服务器文件库...';
+    if (loading) return '数据加载中...';
     if (error) return `读取失败：${error}`;
-    if (!kcfxRecords || Object.keys(kcfxRecords).length === 0) return '未读取到服务器文件库记录';
+    if (!records || Object.keys(records).length === 0) return '未读取到服务器文件库记录';
     const messages = [
       checks.closed.message || `关账库存事实表：有库存物料 ${formatNumber(checks.closed.stockMaterials.length)} 个，缺失 ${formatNumber(totalMissingCount(checks.closed))} 项`,
       checks.detail.message || `库存分析月份表：有库存物料 ${formatNumber(checks.detail.stockMaterials.length)} 个，缺失 ${formatNumber(totalMissingCount(checks.detail))} 项`,
@@ -98,7 +100,7 @@ export default function ErrorsPage({
     ];
     const loadedText = lastLoadedAt ? `；读取时间：${lastLoadedAt}` : '';
     return `检查完成：${messages.join('；')}${loadedText}`;
-  }, [checks, error, kcfxRecords, lastLoadedAt, loading]);
+  }, [checks, error, records, lastLoadedAt, loading]);
 
   function downloadSingle(source, tableName) {
     const result = checks[source];

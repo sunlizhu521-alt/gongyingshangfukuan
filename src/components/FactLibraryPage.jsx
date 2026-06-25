@@ -12,6 +12,6 @@ const FACT_SLOTS = [
   { id: 'fact-8', label: '库存事实表 8' }
 ];
 
-export default function FactLibraryPage(props) {
-  return <KcfxLibraryPage {...props} title="库存数据文件" slots={FACT_SLOTS} />;
+export default function FactLibraryPage({ kcfxData = null, loading = false, ...props }) {
+  return <KcfxLibraryPage {...props} kcfxData={kcfxData} loading={loading} title="库存数据文件" slots={FACT_SLOTS} />;
 }

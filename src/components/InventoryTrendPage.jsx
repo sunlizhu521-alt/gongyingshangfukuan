@@ -2,13 +2,14 @@ import React, { useMemo } from 'react';
 import { BarPanel, KcfxPageShell, MetricCards, PanelGrid, SimpleTable, SourcePanel } from './KcfxCommon.jsx';
 import { formatNumber, getInventoryRows, groupBy, groupSum, moneyWan, recordSourceText, sum } from './kcfxUtils.js';
 
-export default function InventoryTrendPage({ kcfxRecords = {}, loading = false, error = '', lastLoadedAt = '', onRefresh }) {
-  const rows = useMemo(() => getInventoryRows(kcfxRecords), [kcfxRecords]);
+export default function InventoryTrendPage({ kcfxData = null, kcfxRecords = {}, loading = false, error = '', lastLoadedAt = '', onRefresh }) {
+  const records = useMemo(() => kcfxData?.records || kcfxRecords || {}, [kcfxData, kcfxRecords]);
+  const rows = useMemo(() => getInventoryRows(records), [records]);
   const monthRows = useMemo(() => buildMonthRows(rows), [rows]);
   const totalAmount = useMemo(() => sum(rows, 'amount'), [rows]);
   const totalQty = useMemo(() => sum(rows, 'qty'), [rows]);
   const status = loading
-    ? '正在读取趋势文件库...'
+    ? '数据加载中...'
     : error || `参与趋势计算 ${formatNumber(rows.length)} 行，库存金额 ${moneyWan(totalAmount)}${lastLoadedAt ? `；读取时间：${lastLoadedAt}` : ''}`;
 
   return (
@@ -36,8 +37,8 @@ export default function InventoryTrendPage({ kcfxRecords = {}, loading = false, 
         />
       </section>
       <SourcePanel sources={[
-        { label: '库存数据', value: recordSourceText(kcfxRecords['fact-2']) },
-        { label: '商品分类维表', value: recordSourceText(kcfxRecords['dim-product']) }
+        { label: '库存数据', value: recordSourceText(records['fact-2']) },
+        { label: '商品分类维表', value: recordSourceText(records['dim-product']) }
       ]} />
     </KcfxPageShell>
   );

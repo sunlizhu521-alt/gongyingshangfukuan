@@ -2,12 +2,13 @@ import React, { useMemo } from 'react';
 import { BarPanel, KcfxPageShell, MetricCards, PanelGrid, SimpleTable, SourcePanel } from './KcfxCommon.jsx';
 import { formatNumber, getClosedInventoryRows, groupSum, moneyWan, recordSourceText, sum, uniqueCount } from './kcfxUtils.js';
 
-export default function ReceiptSummaryPage({ kcfxRecords = {}, loading = false, error = '', lastLoadedAt = '', onRefresh }) {
-  const rows = useMemo(() => getClosedInventoryRows(kcfxRecords), [kcfxRecords]);
+export default function ReceiptSummaryPage({ kcfxData = null, kcfxRecords = {}, loading = false, error = '', lastLoadedAt = '', onRefresh }) {
+  const records = useMemo(() => kcfxData?.records || kcfxRecords || {}, [kcfxData, kcfxRecords]);
+  const rows = useMemo(() => getClosedInventoryRows(records), [records]);
   const totalAmount = useMemo(() => sum(rows, 'amount'), [rows]);
   const totalQty = useMemo(() => sum(rows, 'qty'), [rows]);
   const status = loading
-    ? '正在读取服务器文件库...'
+    ? '数据加载中...'
     : error || `已读取 ${formatNumber(rows.length)} 行关账库存，库存金额 ${moneyWan(totalAmount)}${lastLoadedAt ? `；读取时间：${lastLoadedAt}` : ''}`;
 
   return (
@@ -47,10 +48,10 @@ export default function ReceiptSummaryPage({ kcfxRecords = {}, loading = false, 
       </section>
 
       <SourcePanel sources={[
-        { label: '最近关账库存', value: recordSourceText(kcfxRecords['fact-inventory']) },
-        { label: '商品分类维表', value: recordSourceText(kcfxRecords['dim-product']) },
-        { label: '仓库维表', value: recordSourceText(kcfxRecords['dim-warehouse']) },
-        { label: '仓库物料事业部对照表', value: recordSourceText(kcfxRecords['dim-warehouse-material']) }
+        { label: '最近关账库存', value: recordSourceText(records['fact-inventory']) },
+        { label: '商品分类维表', value: recordSourceText(records['dim-product']) },
+        { label: '仓库维表', value: recordSourceText(records['dim-warehouse']) },
+        { label: '仓库物料事业部对照表', value: recordSourceText(records['dim-warehouse-material']) }
       ]} />
     </KcfxPageShell>
   );

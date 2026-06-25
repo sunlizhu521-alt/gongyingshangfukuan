@@ -10,6 +10,6 @@ const DIMENSION_SLOTS = [
   { id: 'dim-purchase-division', label: '采购分工明细', description: '产品线明细 sheet' }
 ];
 
-export default function FileLibraryPage(props) {
-  return <KcfxLibraryPage {...props} title="维度表文件库" slots={DIMENSION_SLOTS} />;
+export default function FileLibraryPage({ kcfxData = null, loading = false, ...props }) {
+  return <KcfxLibraryPage {...props} kcfxData={kcfxData} loading={loading} title="维度表文件库" slots={DIMENSION_SLOTS} />;
 }

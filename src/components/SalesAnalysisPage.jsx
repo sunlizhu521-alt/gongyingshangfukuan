@@ -2,11 +2,12 @@ import React, { useMemo } from 'react';
 import { BarPanel, KcfxPageShell, MetricCards, PanelGrid, SimpleTable, SourcePanel } from './KcfxCommon.jsx';
 import { formatNumber, getSalesRows, groupSum, recordSourceText, sum, uniqueCount } from './kcfxUtils.js';
 
-export default function SalesAnalysisPage({ kcfxRecords = {}, loading = false, error = '', lastLoadedAt = '', onRefresh }) {
-  const rows = useMemo(() => getSalesRows(kcfxRecords), [kcfxRecords]);
+export default function SalesAnalysisPage({ kcfxData = null, kcfxRecords = {}, loading = false, error = '', lastLoadedAt = '', onRefresh }) {
+  const records = useMemo(() => kcfxData?.records || kcfxRecords || {}, [kcfxData, kcfxRecords]);
+  const rows = useMemo(() => getSalesRows(records), [records]);
   const totalQty = useMemo(() => sum(rows, 'qty'), [rows]);
   const status = loading
-    ? '正在读取销售数据...'
+    ? '数据加载中...'
     : error || `已读取 ${formatNumber(rows.length)} 行月度销售数据，应收数量 ${formatNumber(totalQty, 2)}${lastLoadedAt ? `；读取时间：${lastLoadedAt}` : ''}`;
 
   return (
@@ -42,10 +43,10 @@ export default function SalesAnalysisPage({ kcfxRecords = {}, loading = false, e
         />
       </section>
       <SourcePanel sources={[
-        { label: '销售数据文件', value: recordSourceText(kcfxRecords['sales-data']) },
-        { label: '商品分类维表', value: recordSourceText(kcfxRecords['dim-product']) },
-        { label: '店铺简称维表', value: recordSourceText(kcfxRecords['dim-customer-material']) },
-        { label: '销售部门维表', value: recordSourceText(kcfxRecords['dim-store-name']) }
+        { label: '销售数据文件', value: recordSourceText(records['sales-data']) },
+        { label: '商品分类维表', value: recordSourceText(records['dim-product']) },
+        { label: '店铺简称维表', value: recordSourceText(records['dim-customer-material']) },
+        { label: '销售部门维表', value: recordSourceText(records['dim-store-name']) }
       ]} />
     </KcfxPageShell>
   );

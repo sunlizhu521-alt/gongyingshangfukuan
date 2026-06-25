@@ -2,9 +2,10 @@ import React, { useMemo } from 'react';
 import { KcfxPageShell, MetricCards, SimpleTable, SourcePanel } from './KcfxCommon.jsx';
 import { formatNumber, recordSourceText, rowsOf } from './kcfxUtils.js';
 
-export default function ComparisonPage({ kcfxRecords = {}, loading = false, error = '', lastLoadedAt = '', onRefresh }) {
+export default function ComparisonPage({ kcfxData = null, kcfxRecords = {}, loading = false, error = '', lastLoadedAt = '', onRefresh }) {
+  const kcfxRecordsFromProps = useMemo(() => kcfxData?.records || kcfxRecords || {}, [kcfxData, kcfxRecords]);
   const records = useMemo(() => (
-    Object.entries(kcfxRecords || {}).map(([id, record]) => ({
+    Object.entries(kcfxRecordsFromProps || {}).map(([id, record]) => ({
       id,
       title: record?.title || record?.slotName || id,
       fileName: record?.fileName || record?.originalName || '-',
@@ -13,9 +14,9 @@ export default function ComparisonPage({ kcfxRecords = {}, loading = false, erro
       columnCount: record?.columns?.length || rowsOf(record)[0] ? Object.keys(rowsOf(record)[0] || {}).length : 0,
       updatedAt: record?.appliedAt || record?.savedAt || ''
     }))
-  ), [kcfxRecords]);
+  ), [kcfxRecordsFromProps]);
   const status = loading
-    ? '正在读取表格文件...'
+    ? '数据加载中...'
     : error || `已加载 ${formatNumber(records.length)} 个文件槽位${lastLoadedAt ? `；读取时间：${lastLoadedAt}` : ''}`;
 
   return (
@@ -42,7 +43,7 @@ export default function ComparisonPage({ kcfxRecords = {}, loading = false, erro
           ]}
         />
       </section>
-      <SourcePanel sources={records.map((record) => ({ label: record.title, value: recordSourceText(kcfxRecords[record.id]) }))} />
+      <SourcePanel sources={records.map((record) => ({ label: record.title, value: recordSourceText(kcfxRecordsFromProps[record.id]) }))} />
     </KcfxPageShell>
   );
 }

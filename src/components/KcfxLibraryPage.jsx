@@ -6,6 +6,7 @@ import { formatNumber, recordSourceText } from './kcfxUtils.js';
 export default function KcfxLibraryPage({
   title,
   slots,
+  kcfxData = null,
   library = {},
   user,
   loading = false,
@@ -15,7 +16,8 @@ export default function KcfxLibraryPage({
 }) {
   const [uploadingSlot, setUploadingSlot] = useState('');
   const [message, setMessage] = useState('');
-  const records = library.records || {};
+  const activeLibrary = kcfxData || library || {};
+  const records = activeLibrary.records || {};
   const rows = useMemo(() => slots.map((slot) => {
     const record = records[slot.id] || { id: slot.id };
     return {
@@ -29,7 +31,7 @@ export default function KcfxLibraryPage({
   }), [records, slots]);
   const canUpload = user?.name === '孙立柱';
   const status = loading
-    ? '正在读取服务器文件库...'
+    ? '数据加载中...'
     : error || message || `已加载 ${formatNumber(rows.length)} 个文件槽位${lastLoadedAt ? `；读取时间：${lastLoadedAt}` : ''}`;
 
   async function uploadSlot(slotId, file) {
@@ -60,7 +62,7 @@ export default function KcfxLibraryPage({
         { label: '槽位数量', value: formatNumber(rows.length) },
         { label: '已应用文件', value: formatNumber(rows.filter((row) => row.rowCount > 0).length) },
         { label: '总行数', value: formatNumber(rows.reduce((total, row) => total + row.rowCount, 0)) },
-        { label: '保存时间', value: library.savedAt ? new Date(library.savedAt).toLocaleString('zh-CN', { hour12: false }) : '-' }
+        { label: '保存时间', value: activeLibrary.savedAt ? new Date(activeLibrary.savedAt).toLocaleString('zh-CN', { hour12: false }) : '-' }
       ]} />
       <div className="kcfx-library-grid">
         {rows.map((row) => (
