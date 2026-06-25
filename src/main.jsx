@@ -13,7 +13,6 @@ import {
   PRODUCT_SERIES_COLUMN,
   PURCHASE_DIVISION_ADDRESS_COLUMN,
   PURCHASE_DIVISION_SUPPLIER_COLUMN,
-  SYSTEM_FILE_LIBRARY_PAGES,
   embeddedKcfxPageMap,
   legacyPermissionMap,
   permissionGroups,
@@ -41,6 +40,7 @@ import PermissionManagementPage from './components/PermissionManagementPage.jsx'
 import InspectionInitialDataPage from './components/InspectionInitialDataPage.jsx';
 import SupplierManagementPage from './components/SupplierManagementPage.jsx';
 import RemindersPage from './components/RemindersPage.jsx';
+import SystemFileLibraryPage from './components/SystemFileLibraryPage.jsx';
 import './styles.css';
 
 function App() {
@@ -1830,37 +1830,13 @@ function App() {
           />
         )}
 
-        {SYSTEM_FILE_LIBRARY_PAGES.some((page) => page.tab === activeTab) && canManageSystemFiles && (
-          <>
-            <div className="section-heading-row">
-              <h2>系统文件库</h2>
-              <span className="section-count">仅管理员可见</span>
-            </div>
-            <section className="system-file-panel">
-              <div className="info-banner">
-                <strong>迁移下载说明</strong>
-                <span>下载包会过滤 SMTP 授权码和用户密码；发票原件、销售库存看板静态文件按现有引用逻辑打包。</span>
-              </div>
-              <div className="system-file-grid">
-                {systemFilePackages
-                  .filter((item) => {
-                    const activePage = SYSTEM_FILE_LIBRARY_PAGES.find((page) => page.tab === activeTab);
-                    return !activePage || item.tabPermission === `systemFileLibrary.${activePage.key}`;
-                  })
-                  .map((item) => (
-                    <article className="system-file-card" key={item.id}>
-                      <h3>{item.label}</h3>
-                      <p>{item.description}</p>
-                      <div className="system-file-meta">
-                        <span>文件数：{item.fileCount}</span>
-                        <span>大小：{formatBytes(item.size)}</span>
-                      </div>
-                      <button type="button" onClick={() => downloadSystemPackage(item.id)}>下载</button>
-                    </article>
-                  ))}
-              </div>
-            </section>
-          </>
+        {canManageSystemFiles && (
+          <SystemFileLibraryPage
+            activeTab={activeTab}
+            systemFilePackages={systemFilePackages}
+            formatBytes={formatBytes}
+            downloadSystemPackage={downloadSystemPackage}
+          />
         )}
 
         {activeTab === 'inspectionInitialData' && canAccessTab('inspectionInitialData') && (
