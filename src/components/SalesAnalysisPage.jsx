@@ -59,4 +59,4 @@ export default function SalesAnalysisPage({ kcfxData = null, kcfxRecords = {}, l
   );
 }
 
-const SALES_ANALYSIS_RECORD_IDS = ['sales-data'];
+const SALES_ANALYSIS_RECORD_IDS = ['sales-data', 'dim-product', 'dim-store-name', 'dim-customer-material'];

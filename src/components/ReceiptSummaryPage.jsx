@@ -60,6 +60,7 @@ export default function ReceiptSummaryPage({ kcfxData = null, kcfxRecords = {}, 
 
       <SourcePanel sources={[
         { label: '最近关账库存', value: recordSourceText(displayRecords['fact-inventory']) },
+        { label: '库存分析月份表', value: recordSourceText(displayRecords['fact-2']) },
         { label: '商品分类维表', value: recordSourceText(displayRecords['dim-product']) },
         { label: '仓库维表', value: recordSourceText(displayRecords['dim-warehouse']) },
         { label: '仓库物料事业部对照表', value: recordSourceText(displayRecords['dim-warehouse-material']) }
@@ -68,4 +69,4 @@ export default function ReceiptSummaryPage({ kcfxData = null, kcfxRecords = {}, 
   );
 }
 
-const RECEIPT_SUMMARY_RECORD_IDS = ['fact-inventory', 'fact-2'];
+const RECEIPT_SUMMARY_RECORD_IDS = ['fact-inventory', 'fact-2', 'dim-product', 'dim-warehouse', 'dim-warehouse-material'];
