@@ -1,10 +1,9 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { API } from '../constants.js';
 import { BarPanel, KcfxPageShell, MetricCards, PanelGrid, SimpleTable, SourcePanel } from './KcfxCommon.jsx';
 import { FilterToolbar, useDashboardFilters } from './KcfxFilters.jsx';
-import { INVENTORY_TREND_MONTHS, KCFX_COLORS, buildInventoryTrendRows, formatNumber, groupSum, moneyWan, recordSourceText, sum } from './kcfxUtils.js';
-import { useKcfxRecordMap } from './kcfxRecordLoader.js';
+import { INVENTORY_TREND_MONTHS, KCFX_COLORS, formatNumber, groupSum, moneyWan, recordSourceText, sum } from './kcfxUtils.js';
 
-const INVENTORY_TREND_RECORD_IDS = ['fact-2', 'fact-3', 'fact-4', 'fact-5', 'fact-6', 'fact-7', 'dim-product', 'dim-warehouse', 'dim-warehouse-material'];
 const INVENTORY_TREND_FILTERS = [
   { id: 'trendWarehouseType', field: 'warehouseType', allLabel: '全部仓库类型', sortByName: true, sortValueField: 'amount' },
   { id: 'trendDepartment', field: 'department', allLabel: '全部事业部', sortValueField: 'amount' },
@@ -14,12 +13,33 @@ const INVENTORY_TREND_FILTERS = [
 ];
 
 export default function InventoryTrendPage({ kcfxData = null, kcfxRecords = {}, error = '', lastLoadedAt = '', onRefresh }) {
-  const { records: loadedRecords, loading: recordsLoading, error: recordsError, reload } = useKcfxRecordMap(kcfxData, INVENTORY_TREND_RECORD_IDS);
-  const records = useMemo(() => ({ ...kcfxRecords, ...loadedRecords }), [kcfxRecords, loadedRecords]);
-  const pageError = recordsError || error;
-  const monthRows = useMemo(() => (
-    buildInventoryTrendRows(records).map((row, index) => ({ ...row, label: `${index + 1}月` }))
-  ), [records]);
+  const [summary, setSummary] = useState(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryError, setSummaryError] = useState('');
+
+  const loadSummary = useCallback(async () => {
+    setSummaryLoading(true);
+    setSummaryError('');
+    try {
+      const response = await fetch(`${API}/api/kcfx-library/trend-summary`, { cache: 'no-store' });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const payload = await response.json();
+      if (!payload?.ok) throw new Error(payload?.message || payload?.error || 'summary not ready');
+      setSummary(payload);
+    } catch (loadError) {
+      setSummaryError(loadError?.message || String(loadError));
+    } finally {
+      setSummaryLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadSummary();
+  }, [loadSummary, kcfxData?.savedAt]);
+
+  const records = kcfxRecords || {};
+  const pageError = summaryError || error;
+  const monthRows = useMemo(() => expandTrendSummaryRows(summary), [summary]);
   const items = useMemo(() => monthRows.flatMap((row) => (row.items || []).map((item) => ({ ...item, month: row.label }))), [monthRows]);
   const filterState = useDashboardFilters(items, INVENTORY_TREND_FILTERS);
   const filteredItems = filterState.filteredRows;
@@ -38,16 +58,16 @@ export default function InventoryTrendPage({ kcfxData = null, kcfxRecords = {}, 
   const totalAmount = useMemo(() => sum(filteredMonthRows, 'amount'), [filteredMonthRows]);
   const totalQty = useMemo(() => sum(filteredMonthRows, 'qty'), [filteredMonthRows]);
   const loadedMonthCount = monthRows.filter((row) => row.record).length;
-  const status = recordsLoading
+  const status = summaryLoading
     ? '数据加载中...'
     : pageError || `已读取 ${loadedMonthCount}/${INVENTORY_TREND_MONTHS.length} 个月份文件，筛选后 ${formatNumber(filteredItems.length)} 行，库存货值 ${moneyWan(totalAmount)}${lastLoadedAt ? `；读取时间：${lastLoadedAt}` : ''}`;
 
   const refresh = async () => {
-    await Promise.all([reload({ force: true }), onRefresh?.()]);
+    await Promise.all([loadSummary(), onRefresh?.()]);
   };
 
   return (
-    <KcfxPageShell title="库存趋势分析" status={status} loading={recordsLoading} onRefresh={refresh}>
+    <KcfxPageShell title="库存趋势分析" status={status} loading={summaryLoading} onRefresh={refresh}>
       <FilterToolbar filters={INVENTORY_TREND_FILTERS} {...filterState} />
 
       <MetricCards metrics={[
@@ -96,7 +116,7 @@ export default function InventoryTrendPage({ kcfxData = null, kcfxRecords = {}, 
       </section>
 
       <SourcePanel sources={[
-        ...INVENTORY_TREND_MONTHS.map((month, index) => ({ label: `${index + 1}月库存事实表`, value: recordSourceText(records[month.id]) })),
+        ...monthRows.map((month) => ({ label: `${month.label}库存事实表`, value: recordSourceText(month.record) })),
         { label: '库存分析月份表', value: recordSourceText(records['fact-2']) },
         { label: '商品分类维表', value: recordSourceText(records['dim-product']) },
         { label: '仓库维表', value: recordSourceText(records['dim-warehouse']) },
@@ -104,6 +124,23 @@ export default function InventoryTrendPage({ kcfxData = null, kcfxRecords = {}, 
       ]} />
     </KcfxPageShell>
   );
+}
+
+function expandTrendSummaryRows(summary) {
+  const rows = Array.isArray(summary?.monthSummaries) ? summary.monthSummaries : [];
+  return rows.map((row, index) => ({
+    ...row,
+    label: `${index + 1}月`,
+    amount: Number(row.amount ?? row.totalValue) || 0,
+    qty: Number(row.qty ?? row.totalQty) || 0,
+    usedRows: Number(row.usedRows) || 0,
+    items: Array.isArray(row.items) ? row.items.map((item) => ({
+      ...item,
+      amount: Number(item.amount ?? item.value) || 0,
+      value: Number(item.value ?? item.amount) || 0,
+      qty: Number(item.qty) || 0
+    })) : []
+  }));
 }
 
 function MonthTrendChart({ rows, formatter }) {
