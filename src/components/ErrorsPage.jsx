@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
+import { useKcfxRecordMap } from './kcfxRecordLoader.js';
 
 const EMPTY_TABLES = {
   closed: emptyErrorResult(),
@@ -77,7 +78,10 @@ export default function ErrorsPage({
   onRefresh
 }) {
   const [downloadMessage, setDownloadMessage] = useState('');
-  const records = useMemo(() => kcfxData?.records || kcfxRecords || {}, [kcfxData, kcfxRecords]);
+  const { records: loadedRecords, loading: recordsLoading, error: recordsError, reload } = useKcfxRecordMap(kcfxData, ERROR_RECORD_IDS);
+  const records = useMemo(() => ({ ...kcfxRecords, ...loadedRecords }), [kcfxRecords, loadedRecords]);
+  const pageLoading = loading || recordsLoading;
+  const pageError = recordsError || error;
 
   const checks = useMemo(() => {
     if (!records || Object.keys(records).length === 0) return EMPTY_TABLES;
@@ -90,8 +94,8 @@ export default function ErrorsPage({
   }, [records]);
 
   const statusText = useMemo(() => {
-    if (loading) return '数据加载中...';
-    if (error) return `读取失败：${error}`;
+    if (pageLoading) return '数据加载中...';
+    if (pageError) return `读取失败：${pageError}`;
     if (!records || Object.keys(records).length === 0) return '未读取到服务器文件库记录';
     const messages = [
       checks.closed.message || `关账库存事实表：有库存物料 ${formatNumber(checks.closed.stockMaterials.length)} 个，缺失 ${formatNumber(totalMissingCount(checks.closed))} 项`,
@@ -100,7 +104,10 @@ export default function ErrorsPage({
     ];
     const loadedText = lastLoadedAt ? `；读取时间：${lastLoadedAt}` : '';
     return `检查完成：${messages.join('；')}${loadedText}`;
-  }, [checks, error, records, lastLoadedAt, loading]);
+  }, [checks, pageError, records, lastLoadedAt, pageLoading]);
+  const refresh = async () => {
+    await Promise.all([reload(), onRefresh?.()]);
+  };
 
   function downloadSingle(source, tableName) {
     const result = checks[source];
@@ -132,10 +139,10 @@ export default function ErrorsPage({
           <p className="section-count">{statusText}</p>
         </div>
         <div className="errors-actions">
-          <button type="button" onClick={onRefresh} disabled={loading}>
-            {loading ? '读取中' : '应用刷新'}
+          <button type="button" onClick={refresh} disabled={pageLoading}>
+            {pageLoading ? '读取中' : '应用刷新'}
           </button>
-          <button type="button" className="ghost" onClick={downloadAll} disabled={loading}>
+          <button type="button" className="ghost" onClick={downloadAll} disabled={pageLoading}>
             一键下载
           </button>
         </div>
@@ -160,6 +167,8 @@ export default function ErrorsPage({
     </section>
   );
 }
+
+const ERROR_RECORD_IDS = ['fact-inventory', 'fact-2', 'sales-data', 'dim-product', 'dim-warehouse', 'dim-warehouse-material', 'dim-store-name', 'dim-customer-material'];
 
 function CheckGroup({ source, title, description, result, onDownload }) {
   return (

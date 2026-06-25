@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import MultiFilter from './MultiFilter.jsx';
+import { useKcfxRecordMap } from './kcfxRecordLoader.js';
 
 const COLORS = ['#007aff', '#34c759', '#ff9f0a', '#af52de', '#ff375f', '#5ac8fa', '#5856d6', '#30d158', '#bf5af2', '#ff6b35'];
 const TREND_YEARS = ['2025', '2026'];
@@ -28,7 +29,10 @@ export default function SalesTrendPage({
   const [openFilter, setOpenFilter] = useState('');
   const [selections, setSelections] = useState(EMPTY_SELECTIONS);
 
-  const records = useMemo(() => kcfxData?.records || kcfxRecords || {}, [kcfxData, kcfxRecords]);
+  const { records: loadedRecords, loading: recordsLoading, error: recordsError, reload } = useKcfxRecordMap(kcfxData, SALES_TREND_RECORD_IDS);
+  const records = useMemo(() => ({ ...kcfxRecords, ...loadedRecords }), [kcfxRecords, loadedRecords]);
+  const pageLoading = loading || recordsLoading;
+  const pageError = recordsError || error;
   const salesData = useMemo(() => buildSalesRows(records), [records]);
   const trendRows = useMemo(() => (
     salesData.rows
@@ -72,8 +76,11 @@ export default function SalesTrendPage({
   }, [filteredRows]);
 
   const totalQty = useMemo(() => sum(filteredRows, 'value'), [filteredRows]);
-  const statusText = buildPageStatus({ loading, error, salesData, trendRows, lastLoadedAt });
+  const statusText = buildPageStatus({ loading: pageLoading, error: pageError, salesData, trendRows, lastLoadedAt });
   const conditionLabel = buildSalesTrendConditionLabel(normalizedSelections);
+  const refresh = async () => {
+    await Promise.all([reload(), onRefresh?.()]);
+  };
 
   function setFilterValue(id, value) {
     setSelections((current) => ({ ...current, [id]: value }));
@@ -92,8 +99,8 @@ export default function SalesTrendPage({
           <p className="section-count">{statusText}</p>
         </div>
         <div className="errors-actions">
-          <button type="button" onClick={onRefresh} disabled={loading}>
-            {loading ? '读取中' : '应用刷新'}
+          <button type="button" onClick={refresh} disabled={pageLoading}>
+            {pageLoading ? '读取中' : '应用刷新'}
           </button>
         </div>
       </header>
@@ -154,6 +161,8 @@ export default function SalesTrendPage({
     </section>
   );
 }
+
+const SALES_TREND_RECORD_IDS = ['sales-data'];
 
 function VerticalTrendChart({ months, grouped, selections }) {
   const values = months.flatMap((month) => TREND_YEARS.map((year) => grouped.get(`${year}-${month}`) || 0));

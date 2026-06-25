@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { API } from '../constants.js';
 import { KcfxPageShell, MetricCards, SimpleTable } from './KcfxCommon.jsx';
 import { formatNumber, recordSourceText } from './kcfxUtils.js';
+import { kcfxRecordsArrayToMap } from './kcfxRecordLoader.js';
 
 export default function KcfxLibraryPage({
   title,
@@ -17,7 +18,7 @@ export default function KcfxLibraryPage({
   const [uploadingSlot, setUploadingSlot] = useState('');
   const [message, setMessage] = useState('');
   const activeLibrary = kcfxData || library || {};
-  const records = activeLibrary.records || {};
+  const records = kcfxRecordsArrayToMap(activeLibrary.records);
   const rows = useMemo(() => slots.map((slot) => {
     const record = records[slot.id] || { id: slot.id };
     return {

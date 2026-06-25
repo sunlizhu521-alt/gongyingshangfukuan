@@ -6,11 +6,7 @@ import {
   EMBEDDED_KCFX_PAGES,
   INSPECTION_LIBRARY_RECORD_IDS,
   INSPECTION_NOTICE_FIELDS,
-  KCFX_CORE_RECORD_IDS,
-  KCFX_ERROR_RECORD_IDS,
   KCFX_LIBRARY_TABS,
-  KCFX_REACT_DATA_TABS,
-  KCFX_SALES_TREND_RECORD_IDS,
   MAINTENANCE_LIBRARY_PAGES,
   MAINTENANCE_LIBRARY_TABS,
   PRIORITY_KCFX_PRELOAD_TABS,
@@ -176,17 +172,9 @@ function App() {
   }, [authChecked, user]);
 
   useEffect(() => {
-    if (!user) return;
-    setKcfxLoading(true);
-    authFetch(`${API}/api/kcfx-library?includeRows=1`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json();
-      })
-      .then((data) => setKcfxData(data))
-      .catch((err) => console.error('kcfx数据加载失败', err))
-      .finally(() => setKcfxLoading(false));
-  }, [user]);
+    if (!authChecked || !user) return;
+    loadKcfxMetadata();
+  }, [authChecked, user]);
 
   function authFetch(url, options = {}) {
     const headers = new Headers(options.headers || {});
@@ -314,60 +302,16 @@ function App() {
     return `/kcfx/${page.sourceFile}?embed=1&v=20260622d`;
   }
 
-  async function loadKcfxErrorRecords() {
-    setKcfxErrorLoading(true);
-    setKcfxErrorMessage('');
+  async function loadKcfxMetadata() {
+    setKcfxLoading(true);
     try {
-      const response = await fetch(`${API}/api/kcfx-library?includeRows=1`, { cache: 'no-store' });
+      const response = await authFetch(`${API}/api/kcfx-library`, { cache: 'no-store' });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const payload = await response.json();
-      const records = Object.fromEntries(
-        KCFX_ERROR_RECORD_IDS.map((id) => [id, payload.records?.[id] || { id, rows: [] }])
-      );
-      setKcfxErrorRecords(records);
-      setKcfxErrorLoadedAt(new Date().toLocaleString('zh-CN'));
+      setKcfxData(await response.json());
     } catch (error) {
-      setKcfxErrorMessage(error?.message || String(error));
+      console.error('kcfx数据加载失败', error);
     } finally {
-      setKcfxErrorLoading(false);
-    }
-  }
-
-  async function loadKcfxSalesTrendRecords() {
-    setKcfxSalesTrendLoading(true);
-    setKcfxSalesTrendMessage('');
-    try {
-      const response = await fetch(`${API}/api/kcfx-library?includeRows=1`, { cache: 'no-store' });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const payload = await response.json();
-      const records = Object.fromEntries(
-        KCFX_SALES_TREND_RECORD_IDS.map((id) => [id, payload.records?.[id] || { id, rows: [] }])
-      );
-      setKcfxSalesTrendRecords(records);
-      setKcfxSalesTrendLoadedAt(new Date().toLocaleString('zh-CN'));
-    } catch (error) {
-      setKcfxSalesTrendMessage(error?.message || String(error));
-    } finally {
-      setKcfxSalesTrendLoading(false);
-    }
-  }
-
-  async function loadKcfxCoreRecords() {
-    setKcfxCoreLoading(true);
-    setKcfxCoreMessage('');
-    try {
-      const response = await fetch(`${API}/api/kcfx-library?includeRows=1`, { cache: 'no-store' });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const payload = await response.json();
-      const records = Object.fromEntries(
-        KCFX_CORE_RECORD_IDS.map((id) => [id, payload.records?.[id] || { id, rows: [] }])
-      );
-      setKcfxCoreRecords(records);
-      setKcfxCoreLoadedAt(new Date().toLocaleString('zh-CN'));
-    } catch (error) {
-      setKcfxCoreMessage(error?.message || String(error));
-    } finally {
-      setKcfxCoreLoading(false);
+      setKcfxLoading(false);
     }
   }
 
@@ -375,10 +319,11 @@ function App() {
     setKcfxLibraryLoading(true);
     setKcfxLibraryMessage('');
     try {
-      const response = await fetch(`${API}/api/kcfx-library?includeRows=0`, { cache: 'no-store' });
+      const response = await fetch(`${API}/api/kcfx-library`, { cache: 'no-store' });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const payload = await response.json();
       setKcfxLibrary(payload || { records: {} });
+      setKcfxData(payload || { records: [] });
       setKcfxLibraryLoadedAt(new Date().toLocaleString('zh-CN'));
     } catch (error) {
       setKcfxLibraryMessage(error?.message || String(error));
@@ -426,7 +371,7 @@ function App() {
       canManagePermissions ? fetch(`${API}/api/users${params}`) : Promise.resolve(null),
       canAccessTab('inspectionInitialData') ? fetch(`${API}/api/quality-inspection/initial-data${params}`) : Promise.resolve(null),
       canAccessTab('inspectionNotice') ? fetch(`${API}/api/quality-inspection/notices${params}`) : Promise.resolve(null),
-      canAccessTab('inspectionNotice') ? fetch(`${API}/api/kcfx-library?includeRows=1`, { cache: 'no-store' }) : Promise.resolve(null),
+      canAccessTab('inspectionNotice') ? fetch(`${API}/api/kcfx-library`, { cache: 'no-store' }) : Promise.resolve(null),
       canManageSystemFiles ? fetch(`${API}/api/system-file-library${params}`) : Promise.resolve(null)
     ]);
     [
@@ -475,7 +420,10 @@ function App() {
     }
     if (inspectionLibraryRes?.ok) {
       const inspectionLibrary = await inspectionLibraryRes.json();
-      setInspectionLibraryRecords(await hydrateInspectionLibraryRecords(inspectionLibrary.records || {}));
+      const inspectionRecords = Array.isArray(inspectionLibrary.records)
+        ? Object.fromEntries(inspectionLibrary.records.map((record) => [record.id, record]).filter(([id]) => id))
+        : inspectionLibrary.records || {};
+      setInspectionLibraryRecords(await hydrateInspectionLibraryRecords(inspectionRecords));
     } else if (!canAccessTab('inspectionNotice')) {
       setInspectionLibraryRecords({});
     }
@@ -499,12 +447,13 @@ function App() {
       try {
         let records = {};
         try {
-          const response = await fetch(`${API}/api/kcfx-library?includeRows=1`, { cache: 'no-store' });
+          const response = await fetch(`${API}/api/kcfx-library`, { cache: 'no-store' });
           if (response.ok) {
             const payload = await response.json();
-            records = Object.fromEntries(
-              INSPECTION_LIBRARY_RECORD_IDS.map((id) => [id, payload.records?.[id] || { id, rows: [] }])
-            );
+            const allRecords = Array.isArray(payload.records)
+              ? Object.fromEntries(payload.records.map((record) => [record.id, record]).filter(([id]) => id))
+              : payload.records || {};
+            records = Object.fromEntries(INSPECTION_LIBRARY_RECORD_IDS.map((id) => [id, allRecords[id] || { id }]));
           }
         } catch {
           records = {};
@@ -525,27 +474,9 @@ function App() {
 
   useEffect(() => {
     if (!authChecked || !user || accessibleEmbeddedKcfxPages.length === 0) return;
-    fetch(`${API}/api/kcfx-library?includeRows=1`, { cache: 'no-store' }).catch(() => {});
+    fetch(`${API}/api/kcfx-library`, { cache: 'no-store' }).catch(() => {});
     fetch(`${API}/api/kcfx-library/receipt-summary`, { cache: 'no-store' }).catch(() => {});
   }, [authChecked, user, accessibleEmbeddedKcfxPages.length]);
-
-  useEffect(() => {
-    if (!authChecked || !user || activeTab !== 'salesInventoryErrors' || !canAccessTab('salesInventoryErrors')) return undefined;
-    loadKcfxErrorRecords();
-    return undefined;
-  }, [activeTab, authChecked, user]);
-
-  useEffect(() => {
-    if (!authChecked || !user || activeTab !== 'salesInventorySalesTrend' || !canAccessTab('salesInventorySalesTrend')) return undefined;
-    loadKcfxSalesTrendRecords();
-    return undefined;
-  }, [activeTab, authChecked, user]);
-
-  useEffect(() => {
-    if (!authChecked || !user || !KCFX_REACT_DATA_TABS.has(activeTab) || !canAccessTab(activeTab)) return undefined;
-    loadKcfxCoreRecords();
-    return undefined;
-  }, [activeTab, authChecked, user]);
 
   useEffect(() => {
     if (!authChecked || !user || !KCFX_LIBRARY_TABS.has(activeTab) || !canAccessTab(activeTab)) return undefined;
@@ -1848,7 +1779,7 @@ function App() {
             loading={kcfxLoading}
             error={kcfxCoreMessage}
             lastLoadedAt={kcfxCoreLoadedAt}
-            onRefresh={loadKcfxCoreRecords}
+            onRefresh={loadKcfxMetadata}
           />
         )}
 
@@ -1859,7 +1790,7 @@ function App() {
             loading={kcfxLoading}
             error={kcfxCoreMessage}
             lastLoadedAt={kcfxCoreLoadedAt}
-            onRefresh={loadKcfxCoreRecords}
+            onRefresh={loadKcfxMetadata}
           />
         )}
 
@@ -1870,7 +1801,7 @@ function App() {
             loading={kcfxLoading}
             error={kcfxCoreMessage}
             lastLoadedAt={kcfxCoreLoadedAt}
-            onRefresh={loadKcfxCoreRecords}
+            onRefresh={loadKcfxMetadata}
           />
         )}
 
@@ -1881,7 +1812,7 @@ function App() {
             loading={kcfxLoading}
             error={kcfxCoreMessage}
             lastLoadedAt={kcfxCoreLoadedAt}
-            onRefresh={loadKcfxCoreRecords}
+            onRefresh={loadKcfxMetadata}
           />
         )}
 
@@ -1928,7 +1859,7 @@ function App() {
             loading={kcfxLoading}
             error={kcfxErrorMessage}
             lastLoadedAt={kcfxErrorLoadedAt}
-            onRefresh={loadKcfxErrorRecords}
+            onRefresh={loadKcfxMetadata}
           />
         )}
 
@@ -1939,7 +1870,7 @@ function App() {
             loading={kcfxLoading}
             error={kcfxSalesTrendMessage}
             lastLoadedAt={kcfxSalesTrendLoadedAt}
-            onRefresh={loadKcfxSalesTrendRecords}
+            onRefresh={loadKcfxMetadata}
           />
         )}
 

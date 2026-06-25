@@ -80,20 +80,11 @@ export default function registerKcfxRoutes(app, db) {
 app.get('/api/kcfx-library', async (req, res) => {
   const db = await initDb(dataDir);
   await externalizeKcfxLibraryInlineRows(db);
-  if (req.query.includeRows === '1') {
-    const records = await Promise.all(Object.entries(db.kcfxLibrary?.records || {}).map(async ([id, sourceRecord]) => {
-      const source = { ...sourceRecord, id: sourceRecord?.id || id };
-      const recordWithRowsMetadata = await ensureKcfxRecordRows(db, id, source);
-      return attachKcfxRecordRows({ ...recordWithRowsMetadata, id: recordWithRowsMetadata?.id || id });
-    }));
-    return res.json({
-      schemaVersion: db.kcfxLibrary?.schemaVersion || 1,
-      project: 'kcfx',
-      savedAt: db.kcfxLibrary?.savedAt || '',
-      records
-    });
-  }
-  return res.json(publicKcfxLibrary(db, { includeRows: false }));
+  const library = publicKcfxLibrary(db);
+  return res.json({
+    ...library,
+    records: Object.values(library.records || {})
+  });
 });
 
 app.get('/api/kcfx-library/preloaded', async (req, res) => {

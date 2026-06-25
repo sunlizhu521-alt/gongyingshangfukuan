@@ -1,17 +1,24 @@
 import React, { useMemo } from 'react';
 import { BarPanel, KcfxPageShell, MetricCards, PanelGrid, SimpleTable, SourcePanel } from './KcfxCommon.jsx';
 import { formatNumber, getSalesRows, groupSum, recordSourceText, sum, uniqueCount } from './kcfxUtils.js';
+import { useKcfxRecordMap } from './kcfxRecordLoader.js';
 
 export default function SalesAnalysisPage({ kcfxData = null, kcfxRecords = {}, loading = false, error = '', lastLoadedAt = '', onRefresh }) {
-  const records = useMemo(() => kcfxData?.records || kcfxRecords || {}, [kcfxData, kcfxRecords]);
+  const { records: loadedRecords, loading: recordsLoading, error: recordsError, reload } = useKcfxRecordMap(kcfxData, SALES_ANALYSIS_RECORD_IDS);
+  const records = useMemo(() => ({ ...kcfxRecords, ...loadedRecords }), [kcfxRecords, loadedRecords]);
+  const pageLoading = loading || recordsLoading;
+  const pageError = recordsError || error;
   const rows = useMemo(() => getSalesRows(records), [records]);
   const totalQty = useMemo(() => sum(rows, 'qty'), [rows]);
-  const status = loading
+  const status = pageLoading
     ? '数据加载中...'
-    : error || `已读取 ${formatNumber(rows.length)} 行月度销售数据，应收数量 ${formatNumber(totalQty, 2)}${lastLoadedAt ? `；读取时间：${lastLoadedAt}` : ''}`;
+    : pageError || `已读取 ${formatNumber(rows.length)} 行月度销售数据，应收数量 ${formatNumber(totalQty, 2)}${lastLoadedAt ? `；读取时间：${lastLoadedAt}` : ''}`;
+  const refresh = async () => {
+    await Promise.all([reload(), onRefresh?.()]);
+  };
 
   return (
-    <KcfxPageShell title="月度销售数据" status={status} loading={loading} onRefresh={onRefresh}>
+    <KcfxPageShell title="月度销售数据" status={status} loading={pageLoading} onRefresh={refresh}>
       <MetricCards metrics={[
         { label: '销售数量', value: formatNumber(totalQty, 2) },
         { label: '销售月份', value: formatNumber(uniqueCount(rows, 'salesMonth')) },
@@ -51,3 +58,5 @@ export default function SalesAnalysisPage({ kcfxData = null, kcfxRecords = {}, l
     </KcfxPageShell>
   );
 }
+
+const SALES_ANALYSIS_RECORD_IDS = ['sales-data'];

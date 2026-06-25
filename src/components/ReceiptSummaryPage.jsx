@@ -1,18 +1,25 @@
 import React, { useMemo } from 'react';
 import { BarPanel, KcfxPageShell, MetricCards, PanelGrid, SimpleTable, SourcePanel } from './KcfxCommon.jsx';
 import { formatNumber, getClosedInventoryRows, groupSum, moneyWan, recordSourceText, sum, uniqueCount } from './kcfxUtils.js';
+import { useKcfxRecordMap } from './kcfxRecordLoader.js';
 
 export default function ReceiptSummaryPage({ kcfxData = null, kcfxRecords = {}, loading = false, error = '', lastLoadedAt = '', onRefresh }) {
-  const records = useMemo(() => kcfxData?.records || kcfxRecords || {}, [kcfxData, kcfxRecords]);
+  const { records: loadedRecords, loading: recordsLoading, error: recordsError, reload } = useKcfxRecordMap(kcfxData, RECEIPT_SUMMARY_RECORD_IDS);
+  const records = useMemo(() => ({ ...kcfxRecords, ...loadedRecords }), [kcfxRecords, loadedRecords]);
+  const pageLoading = loading || recordsLoading;
+  const pageError = recordsError || error;
   const rows = useMemo(() => getClosedInventoryRows(records), [records]);
   const totalAmount = useMemo(() => sum(rows, 'amount'), [rows]);
   const totalQty = useMemo(() => sum(rows, 'qty'), [rows]);
-  const status = loading
+  const status = pageLoading
     ? '数据加载中...'
-    : error || `已读取 ${formatNumber(rows.length)} 行关账库存，库存金额 ${moneyWan(totalAmount)}${lastLoadedAt ? `；读取时间：${lastLoadedAt}` : ''}`;
+    : pageError || `已读取 ${formatNumber(rows.length)} 行关账库存，库存金额 ${moneyWan(totalAmount)}${lastLoadedAt ? `；读取时间：${lastLoadedAt}` : ''}`;
+  const refresh = async () => {
+    await Promise.all([reload(), onRefresh?.()]);
+  };
 
   return (
-    <KcfxPageShell title="关账库存分析" status={status} loading={loading} onRefresh={onRefresh}>
+    <KcfxPageShell title="关账库存分析" status={status} loading={pageLoading} onRefresh={refresh}>
       <MetricCards metrics={[
         { label: '库存金额合计', value: moneyWan(totalAmount) },
         { label: '库存合计', value: formatNumber(totalQty, 2) },
@@ -56,3 +63,5 @@ export default function ReceiptSummaryPage({ kcfxData = null, kcfxRecords = {}, 
     </KcfxPageShell>
   );
 }
+
+const RECEIPT_SUMMARY_RECORD_IDS = ['fact-inventory'];
