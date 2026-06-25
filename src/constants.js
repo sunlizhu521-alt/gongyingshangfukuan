@@ -24,6 +24,7 @@ const INSPECTION_DEPARTMENT_OPTIONS = ['海外事业部一部', '海外事业二
 const INSPECTION_LIBRARY_RECORD_IDS = ['dim-purchase-division', 'dim-product'];
 const KCFX_ERROR_RECORD_IDS = ['fact-inventory', 'fact-2', 'sales-data', 'dim-product', 'dim-warehouse', 'dim-warehouse-material', 'dim-store-name', 'dim-customer-material'];
 const KCFX_SALES_TREND_RECORD_IDS = ['sales-data', 'dim-product', 'dim-store-name', 'dim-customer-material'];
+const KCFX_INVENTORY_STATIC_REPORT_RECORD_IDS = ['fact-2', 'dim-product', 'dim-warehouse', 'dim-warehouse-material'];
 const PURCHASE_DIVISION_SUPPLIER_COLUMN = 9;
 const PURCHASE_DIVISION_ADDRESS_COLUMN = 12;
 const PRODUCT_LINE_COLUMN = 7;
@@ -34,6 +35,7 @@ const KCFX_INDEXED_DB_STORE = 'files';
 const SALES_INVENTORY_PAGES = [
   { tab: 'salesInventoryReceiptSummary', key: 'receiptSummary', label: '关账库存分析', sourceFile: 'receipt-summary.html' },
   { tab: 'salesInventoryInventoryTrend', key: 'inventoryTrend', label: '库存趋势分析', sourceFile: 'inventory-trend.html' },
+  { tab: 'salesInventoryInventoryStaticReport', key: 'inventoryStaticReport', label: '库存静态报告', sourceFile: 'inventory-static-report.html' },
   { tab: 'salesInventorySalesAnalysis', key: 'salesAnalysis', label: '月度销售数据', sourceFile: 'sales-analysis.html' },
   { tab: 'salesInventorySalesTrend', key: 'salesTrend', label: '销售趋势变化', sourceFile: 'sales-trend.html' },
   { tab: 'salesInventoryComparison', key: 'comparison', label: '表格对比分析', sourceFile: 'comparison.html' },
@@ -47,7 +49,7 @@ const MAINTENANCE_LIBRARY_PAGES = [
 ];
 
 const EMBEDDED_KCFX_PAGES = [
-  ...SALES_INVENTORY_PAGES.filter((page) => !['salesInventoryErrors', 'salesInventorySalesTrend'].includes(page.tab)),
+  ...SALES_INVENTORY_PAGES.filter((page) => !['salesInventoryErrors', 'salesInventorySalesTrend', 'salesInventoryInventoryStaticReport'].includes(page.tab)),
   ...MAINTENANCE_LIBRARY_PAGES
 ];
 const PRIORITY_KCFX_PRELOAD_TABS = new Set(['salesInventorySalesAnalysis']);
@@ -137,6 +139,7 @@ export {
   INSPECTION_LIBRARY_RECORD_IDS,
   INSPECTION_NOTICE_FIELDS,
   KCFX_ERROR_RECORD_IDS,
+  KCFX_INVENTORY_STATIC_REPORT_RECORD_IDS,
   KCFX_SALES_TREND_RECORD_IDS,
   KCFX_INDEXED_DB_NAME,
   KCFX_INDEXED_DB_STORE,

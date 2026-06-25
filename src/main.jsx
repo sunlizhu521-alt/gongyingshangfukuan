@@ -7,6 +7,7 @@ import {
   INSPECTION_LIBRARY_RECORD_IDS,
   INSPECTION_NOTICE_FIELDS,
   KCFX_ERROR_RECORD_IDS,
+  KCFX_INVENTORY_STATIC_REPORT_RECORD_IDS,
   KCFX_SALES_TREND_RECORD_IDS,
   MAINTENANCE_LIBRARY_PAGES,
   MAINTENANCE_LIBRARY_TABS,
@@ -49,6 +50,7 @@ import InvoiceManagementPage from './components/InvoiceManagementPage.jsx';
 import AuthPage from './components/AuthPage.jsx';
 import ErrorsPage from './components/ErrorsPage.jsx';
 import SalesTrendPage from './components/SalesTrendPage.jsx';
+import InventoryStaticReportPage from './components/InventoryStaticReportPage.jsx';
 import './styles.css';
 
 function App() {
@@ -88,6 +90,10 @@ function App() {
   const [kcfxSalesTrendLoading, setKcfxSalesTrendLoading] = useState(false);
   const [kcfxSalesTrendMessage, setKcfxSalesTrendMessage] = useState('');
   const [kcfxSalesTrendLoadedAt, setKcfxSalesTrendLoadedAt] = useState('');
+  const [kcfxInventoryStaticReportRecords, setKcfxInventoryStaticReportRecords] = useState({});
+  const [kcfxInventoryStaticReportLoading, setKcfxInventoryStaticReportLoading] = useState(false);
+  const [kcfxInventoryStaticReportMessage, setKcfxInventoryStaticReportMessage] = useState('');
+  const [kcfxInventoryStaticReportLoadedAt, setKcfxInventoryStaticReportLoadedAt] = useState('');
   const [mountedKcfxTabs, setMountedKcfxTabs] = useState(() => new Set());
   const [supplierImportResult, setSupplierImportResult] = useState(null);
   const [ownerImportResult, setOwnerImportResult] = useState(null);
@@ -312,6 +318,26 @@ function App() {
     }
   }
 
+  async function loadKcfxInventoryStaticReportRecords() {
+    setKcfxInventoryStaticReportLoading(true);
+    setKcfxInventoryStaticReportMessage('');
+    try {
+      const ids = KCFX_INVENTORY_STATIC_REPORT_RECORD_IDS.join(',');
+      const response = await fetch(`${API}/api/kcfx-library/preloaded?ids=${encodeURIComponent(ids)}`, { cache: 'no-store' });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const payload = await response.json();
+      const records = Object.fromEntries(
+        KCFX_INVENTORY_STATIC_REPORT_RECORD_IDS.map((id) => [id, payload.records?.[id] || { id, rows: [] }])
+      );
+      setKcfxInventoryStaticReportRecords(records);
+      setKcfxInventoryStaticReportLoadedAt(new Date().toLocaleString('zh-CN'));
+    } catch (error) {
+      setKcfxInventoryStaticReportMessage(error?.message || String(error));
+    } finally {
+      setKcfxInventoryStaticReportLoading(false);
+    }
+  }
+
   async function hydrateInspectionLibraryRecords(records = {}) {
     const nextRecords = { ...records };
     const missingIds = INSPECTION_LIBRARY_RECORD_IDS.filter((id) => {
@@ -471,6 +497,12 @@ function App() {
   useEffect(() => {
     if (!authChecked || !user || activeTab !== 'salesInventorySalesTrend' || !canAccessTab('salesInventorySalesTrend')) return undefined;
     loadKcfxSalesTrendRecords();
+    return undefined;
+  }, [activeTab, authChecked, user]);
+
+  useEffect(() => {
+    if (!authChecked || !user || activeTab !== 'salesInventoryInventoryStaticReport' || !canAccessTab('salesInventoryInventoryStaticReport')) return undefined;
+    loadKcfxInventoryStaticReportRecords();
     return undefined;
   }, [activeTab, authChecked, user]);
 
@@ -1779,6 +1811,16 @@ function App() {
             error={kcfxSalesTrendMessage}
             lastLoadedAt={kcfxSalesTrendLoadedAt}
             onRefresh={loadKcfxSalesTrendRecords}
+          />
+        )}
+
+        {activeTab === 'salesInventoryInventoryStaticReport' && canAccessTab('salesInventoryInventoryStaticReport') && (
+          <InventoryStaticReportPage
+            kcfxRecords={kcfxInventoryStaticReportRecords}
+            loading={kcfxInventoryStaticReportLoading}
+            error={kcfxInventoryStaticReportMessage}
+            lastLoadedAt={kcfxInventoryStaticReportLoadedAt}
+            onRefresh={loadKcfxInventoryStaticReportRecords}
           />
         )}
 
