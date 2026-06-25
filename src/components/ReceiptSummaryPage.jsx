@@ -1,14 +1,18 @@
 import React, { useMemo } from 'react';
 import { BarPanel, KcfxPageShell, MetricCards, PanelGrid, SimpleTable, SourcePanel } from './KcfxCommon.jsx';
-import { formatNumber, getClosedInventoryRows, groupSum, moneyWan, recordSourceText, sum, uniqueCount } from './kcfxUtils.js';
+import { formatNumber, getClosedInventoryRows, groupSum, moneyWan, recordSourceText, rowsOf, sum, uniqueCount } from './kcfxUtils.js';
 import { useKcfxRecordMap } from './kcfxRecordLoader.js';
 
 export default function ReceiptSummaryPage({ kcfxData = null, kcfxRecords = {}, loading = false, error = '', lastLoadedAt = '', onRefresh }) {
   const { records: loadedRecords, loading: recordsLoading, error: recordsError, reload } = useKcfxRecordMap(kcfxData, RECEIPT_SUMMARY_RECORD_IDS);
   const records = useMemo(() => ({ ...kcfxRecords, ...loadedRecords }), [kcfxRecords, loadedRecords]);
+  const displayRecords = useMemo(() => {
+    if (rowsOf(records['fact-inventory']).length || !records['fact-2']) return records;
+    return { ...records, 'fact-inventory': { ...records['fact-2'], id: 'fact-inventory', fallbackSourceId: 'fact-2' } };
+  }, [records]);
   const pageLoading = loading || recordsLoading;
   const pageError = recordsError || error;
-  const rows = useMemo(() => getClosedInventoryRows(records), [records]);
+  const rows = useMemo(() => getClosedInventoryRows(displayRecords), [displayRecords]);
   const totalAmount = useMemo(() => sum(rows, 'amount'), [rows]);
   const totalQty = useMemo(() => sum(rows, 'qty'), [rows]);
   const status = pageLoading
@@ -55,13 +59,13 @@ export default function ReceiptSummaryPage({ kcfxData = null, kcfxRecords = {}, 
       </section>
 
       <SourcePanel sources={[
-        { label: '最近关账库存', value: recordSourceText(records['fact-inventory']) },
-        { label: '商品分类维表', value: recordSourceText(records['dim-product']) },
-        { label: '仓库维表', value: recordSourceText(records['dim-warehouse']) },
-        { label: '仓库物料事业部对照表', value: recordSourceText(records['dim-warehouse-material']) }
+        { label: '最近关账库存', value: recordSourceText(displayRecords['fact-inventory']) },
+        { label: '商品分类维表', value: recordSourceText(displayRecords['dim-product']) },
+        { label: '仓库维表', value: recordSourceText(displayRecords['dim-warehouse']) },
+        { label: '仓库物料事业部对照表', value: recordSourceText(displayRecords['dim-warehouse-material']) }
       ]} />
     </KcfxPageShell>
   );
 }
 
-const RECEIPT_SUMMARY_RECORD_IDS = ['fact-inventory'];
+const RECEIPT_SUMMARY_RECORD_IDS = ['fact-inventory', 'fact-2'];

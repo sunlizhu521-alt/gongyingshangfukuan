@@ -9,8 +9,24 @@ export async function fetchKcfxRecord(id) {
 }
 
 export async function fetchKcfxRecordMap(ids) {
-  const records = await Promise.all(ids.map((id) => fetchKcfxRecord(id)));
-  return Object.fromEntries(records.map((record, index) => [record.id || ids[index], record]));
+  const results = await Promise.all(ids.map(async (id) => {
+    try {
+      return { id, record: await fetchKcfxRecord(id) };
+    } catch (error) {
+      return { id, error: error?.message || String(error) };
+    }
+  }));
+  const records = {};
+  const failedIds = [];
+  for (const result of results) {
+    if (result.record) {
+      records[result.record.id || result.id] = result.record;
+    } else {
+      failedIds.push(result.id);
+      records[result.id] = { id: result.id, rows: [], loadError: result.error };
+    }
+  }
+  return { records, failedIds };
 }
 
 export function kcfxRecordsArrayToMap(records) {
@@ -31,7 +47,10 @@ export function useKcfxRecordMap(kcfxData, ids) {
     setLoading(true);
     setError('');
     try {
-      setRowRecords(await fetchKcfxRecordMap(ids));
+      const result = await fetchKcfxRecordMap(ids);
+      setRowRecords(result.records);
+      const hasRows = Object.values(result.records).some((record) => Array.isArray(record?.rows) && record.rows.length > 0);
+      setError(!hasRows && result.failedIds.length ? `记录加载失败：${result.failedIds.join('、')}` : '');
     } catch (loadError) {
       setError(loadError?.message || String(loadError));
     } finally {
