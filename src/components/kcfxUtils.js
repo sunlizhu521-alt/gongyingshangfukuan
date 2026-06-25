@@ -182,10 +182,18 @@ export function mapDepartments(rows) {
 }
 
 export function getInventoryRows(records) {
+  return getInventoryRowsByRecordId(records, 'fact-2');
+}
+
+export function getClosedInventoryRows(records) {
+  return getInventoryRowsByRecordId(records, 'fact-inventory');
+}
+
+function getInventoryRowsByRecordId(records, recordId) {
   const productMap = mapProducts(rowsOf(records['dim-product']));
   const warehouseMap = mapWarehouses(rowsOf(records['dim-warehouse']));
   const departmentMap = mapDepartments(rowsOf(records['dim-warehouse-material']));
-  return rowsOf(records['fact-2']).map((row) => enrichInventoryRow(row, { productMap, warehouseMap, departmentMap }))
+  return rowsOf(records[recordId]).map((row) => enrichInventoryRow(row, { productMap, warehouseMap, departmentMap }))
     .filter((row) => row.materialCode || row.warehouse || row.qty || row.amount);
 }
 

@@ -1,9 +1,9 @@
 import React, { useMemo } from 'react';
 import { BarPanel, KcfxPageShell, MetricCards, PanelGrid, SimpleTable, SourcePanel } from './KcfxCommon.jsx';
-import { formatNumber, getInventoryRows, groupSum, moneyWan, recordSourceText, sum, uniqueCount } from './kcfxUtils.js';
+import { formatNumber, getClosedInventoryRows, groupSum, moneyWan, recordSourceText, sum, uniqueCount } from './kcfxUtils.js';
 
 export default function ReceiptSummaryPage({ kcfxRecords = {}, loading = false, error = '', lastLoadedAt = '', onRefresh }) {
-  const rows = useMemo(() => getInventoryRows(kcfxRecords), [kcfxRecords]);
+  const rows = useMemo(() => getClosedInventoryRows(kcfxRecords), [kcfxRecords]);
   const totalAmount = useMemo(() => sum(rows, 'amount'), [rows]);
   const totalQty = useMemo(() => sum(rows, 'qty'), [rows]);
   const status = loading
@@ -47,7 +47,7 @@ export default function ReceiptSummaryPage({ kcfxRecords = {}, loading = false, 
       </section>
 
       <SourcePanel sources={[
-        { label: '库存分析月份表', value: recordSourceText(kcfxRecords['fact-2']) },
+        { label: '最近关账库存', value: recordSourceText(kcfxRecords['fact-inventory']) },
         { label: '商品分类维表', value: recordSourceText(kcfxRecords['dim-product']) },
         { label: '仓库维表', value: recordSourceText(kcfxRecords['dim-warehouse']) },
         { label: '仓库物料事业部对照表', value: recordSourceText(kcfxRecords['dim-warehouse-material']) }
