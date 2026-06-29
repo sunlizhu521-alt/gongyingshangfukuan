@@ -12,6 +12,8 @@ const INVENTORY_TREND_FILTERS = [
   { id: 'trendWarehouseLocation', field: 'warehouseLocation', allLabel: '全部仓库位置', sortValueField: 'amount' }
 ];
 
+const INVENTORY_TREND_BAR_LIMIT = 1000;
+
 export default function InventoryTrendPage({ kcfxData = null, kcfxRecords = {}, error = '', lastLoadedAt = '', onRefresh }) {
   const [summary, setSummary] = useState(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
@@ -97,9 +99,9 @@ export default function InventoryTrendPage({ kcfxData = null, kcfxRecords = {}, 
       </section>
 
       <PanelGrid className="inventory-trend-three-grid">
-        <BarPanel title="事业部库存货值" rows={groupSum(filteredItems, 'department', 'amount', 10)} total={totalAmount} valueFormatter={moneyWan} />
-        <BarPanel title="销售产品线库存货值" rows={groupSum(filteredItems, 'productLine', 'amount', 10)} total={totalAmount} valueFormatter={moneyWan} />
-        <BarPanel title="仓库位置库存货值" rows={groupSum(filteredItems, 'warehouseLocation', 'amount', 10)} total={totalAmount} valueFormatter={moneyWan} />
+        <BarPanel title="事业部库存货值" rows={groupSum(filteredItems, 'department', 'amount', INVENTORY_TREND_BAR_LIMIT)} total={totalAmount} valueFormatter={moneyWan} />
+        <BarPanel title="销售产品线库存货值" rows={groupSum(filteredItems, 'productLine', 'amount', INVENTORY_TREND_BAR_LIMIT)} total={totalAmount} valueFormatter={moneyWan} />
+        <BarPanel title="仓库位置库存货值" rows={groupSum(filteredItems, 'warehouseLocation', 'amount', INVENTORY_TREND_BAR_LIMIT)} total={totalAmount} valueFormatter={moneyWan} />
       </PanelGrid>
 
       <section className="kcfx-panel">

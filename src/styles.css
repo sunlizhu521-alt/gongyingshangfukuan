@@ -552,11 +552,11 @@ h3 {
 }
 
 .inventory-trend-three-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .kcfx-react-page .dashboard-grid.receipt-chart-grid.inventory-trend-three-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .month-calendar-filter {
@@ -1264,28 +1264,46 @@ th {
 }
 
 .kcfx-react-page .dashboard-grid.receipt-chart-grid.inventory-trend-three-grid .bar-row {
-  grid-template-columns: minmax(72px, 20%) minmax(96px, 1fr) max-content;
-  column-gap: 8px;
+  grid-template-columns: minmax(140px, 18%) minmax(220px, 1fr) minmax(180px, max-content);
+  column-gap: 14px;
 }
 
 .kcfx-react-page .dashboard-grid.receipt-chart-grid.inventory-trend-three-grid .bar-label {
-  -webkit-line-clamp: 1;
-  word-break: keep-all;
+  display: block;
+  overflow: visible;
+  -webkit-line-clamp: unset;
+  word-break: break-word;
+  white-space: normal;
 }
 
 .kcfx-react-page .dashboard-grid.receipt-chart-grid.inventory-trend-three-grid .bar-track {
-  min-width: 96px;
+  min-width: 220px;
   height: 15px;
 }
 
 .kcfx-react-page .dashboard-grid.receipt-chart-grid.inventory-trend-three-grid .bar-value {
+  min-width: 180px;
   max-width: none;
   overflow: visible;
   color: #334155;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   text-overflow: clip;
   white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .kcfx-react-page .dashboard-grid.receipt-chart-grid.inventory-trend-three-grid .bar-row {
+    grid-template-columns: minmax(0, 1fr) minmax(180px, max-content);
+    grid-template-areas:
+      "label value"
+      "track track";
+    row-gap: 6px;
+  }
+
+  .kcfx-react-page .dashboard-grid.receipt-chart-grid.inventory-trend-three-grid .bar-track {
+    min-width: 0;
+  }
 }
 
 .panel {
