@@ -4,10 +4,11 @@ import { BarPanel, KcfxPageShell, MetricCards, PanelGrid, SimpleTable, SourcePan
 import { FilterToolbar, useDashboardFilters } from './KcfxFilters.jsx';
 import { formatNumber, groupSum, moneyWan, recordSourceText, sum, uniqueCount } from './kcfxUtils.js';
 
+const AGE_BUCKET_ORDER = ['0-30天', '31-60天', '61-90天', '91-120天', '121-150天', '150天以上'];
 const RECEIPT_FILTERS = [
   { id: 'receiptWarehouseType', field: 'warehouseType', allLabel: '全部仓库类型', sortByName: true, sortValueField: 'amount' },
   { id: 'receiptDepartment', field: 'department', allLabel: '全部事业部', sortValueField: 'amount' },
-  { id: 'receiptAgeGroup', field: 'ageGroup', allLabel: '全部库龄', sortByName: true, sortValueField: 'amount' },
+  { id: 'receiptAgeGroup', field: 'ageGroup', allLabel: '全部库龄', preferredOrder: AGE_BUCKET_ORDER, sortValueField: 'amount' },
   { id: 'receiptSaleStatus', field: 'saleStatus', allLabel: '全部可售状态', sortValueField: 'amount' },
   { id: 'receiptProductCategory', field: 'productCategory', allLabel: '全部商品分类', sortValueField: 'amount' },
   { id: 'receiptProductLine', field: 'productLine', allLabel: '全部销售产品线', sortValueField: 'amount' },

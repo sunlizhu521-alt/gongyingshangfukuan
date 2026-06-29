@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 
 export default function MonthCalendarFilter({
   id,
@@ -11,6 +11,7 @@ export default function MonthCalendarFilter({
   setOpenFilter
 }) {
   const isOpen = openFilter === id;
+  const rootRef = useRef(null);
   const optionValues = options.map((option) => option.value).filter(Boolean).sort();
   const value = selected[0] || '';
   const selectedLabel = options.find((option) => option.value === value)?.label || value;
@@ -23,8 +24,19 @@ export default function MonthCalendarFilter({
     setOpenFilter('');
   }
 
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    function closeOnOutsidePointer(event) {
+      if (!rootRef.current?.contains(event.target)) {
+        setOpenFilter('');
+      }
+    }
+    document.addEventListener('pointerdown', closeOnOutsidePointer);
+    return () => document.removeEventListener('pointerdown', closeOnOutsidePointer);
+  }, [isOpen, setOpenFilter]);
+
   return (
-    <div className="month-calendar-filter">
+    <div className="month-calendar-filter" ref={rootRef}>
       <button
         type="button"
         className="month-filter-trigger"

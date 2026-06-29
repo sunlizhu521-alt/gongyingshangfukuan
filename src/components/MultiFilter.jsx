@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 
 function MultiFilter({ id, label, allLabel, options, selected = [], onChange, openFilter, setOpenFilter }) {
   const isOpen = openFilter === id;
+  const rootRef = useRef(null);
   const selectedLabels = selected
     .map((value) => options.find((option) => option.value === value)?.label || value)
     .filter(Boolean);
@@ -19,8 +20,19 @@ function MultiFilter({ id, label, allLabel, options, selected = [], onChange, op
     }
   }
 
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    function closeOnOutsidePointer(event) {
+      if (!rootRef.current?.contains(event.target)) {
+        setOpenFilter('');
+      }
+    }
+    document.addEventListener('pointerdown', closeOnOutsidePointer);
+    return () => document.removeEventListener('pointerdown', closeOnOutsidePointer);
+  }, [isOpen, setOpenFilter]);
+
   return (
-    <div className="multi-filter">
+    <div className="multi-filter" ref={rootRef}>
       <button
         type="button"
         className="multi-filter-button"
