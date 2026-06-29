@@ -1264,6 +1264,50 @@ th {
   white-space: nowrap;
 }
 
+.receipt-summary-amount-grid,
+.kcfx-react-page .dashboard-grid.receipt-chart-grid.receipt-summary-amount-grid {
+  grid-template-columns: minmax(0, 1fr);
+  overflow-x: visible;
+}
+
+.kcfx-react-page .dashboard-grid.receipt-chart-grid.receipt-summary-amount-grid .panel {
+  min-height: auto;
+  padding: 16px;
+}
+
+.kcfx-react-page .dashboard-grid.receipt-chart-grid.receipt-summary-amount-grid .panel h2 {
+  font-size: 15px;
+}
+
+.kcfx-react-page .dashboard-grid.receipt-chart-grid.receipt-summary-amount-grid .bar-row {
+  grid-template-columns: minmax(150px, 18%) minmax(220px, 1fr) minmax(240px, max-content);
+  column-gap: 14px;
+}
+
+.kcfx-react-page .dashboard-grid.receipt-chart-grid.receipt-summary-amount-grid .bar-label {
+  display: block;
+  overflow: visible;
+  -webkit-line-clamp: unset;
+  word-break: break-word;
+  white-space: normal;
+}
+
+.kcfx-react-page .dashboard-grid.receipt-chart-grid.receipt-summary-amount-grid .bar-track {
+  min-width: 220px;
+  height: 15px;
+}
+
+.kcfx-react-page .dashboard-grid.receipt-chart-grid.receipt-summary-amount-grid .bar-value {
+  min-width: 240px;
+  max-width: none;
+  overflow: visible;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 800;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
 .kcfx-react-page .dashboard-grid.receipt-chart-grid.inventory-trend-three-grid .bar-row {
   grid-template-columns: minmax(140px, 18%) minmax(220px, 1fr) minmax(240px, max-content);
   column-gap: 14px;
@@ -1294,6 +1338,18 @@ th {
 }
 
 @media (max-width: 760px) {
+  .kcfx-react-page .dashboard-grid.receipt-chart-grid.receipt-summary-amount-grid .bar-row {
+    grid-template-columns: minmax(0, 1fr) minmax(240px, max-content);
+    grid-template-areas:
+      "label value"
+      "track track";
+    row-gap: 6px;
+  }
+
+  .kcfx-react-page .dashboard-grid.receipt-chart-grid.receipt-summary-amount-grid .bar-track {
+    min-width: 0;
+  }
+
   .kcfx-react-page .dashboard-grid.receipt-chart-grid.inventory-trend-three-grid .bar-row {
     grid-template-columns: minmax(0, 1fr) minmax(240px, max-content);
     grid-template-areas:

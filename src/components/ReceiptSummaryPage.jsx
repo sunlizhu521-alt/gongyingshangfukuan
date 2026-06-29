@@ -74,7 +74,7 @@ export default function ReceiptSummaryPage({ kcfxData = null, kcfxRecords = {}, 
         { label: '事业部数量', value: formatNumber(uniqueCount(filteredRows, 'department')) }
       ]} />
 
-      <PanelGrid>
+      <PanelGrid className="receipt-summary-amount-grid">
         <BarPanel title="仓库类型库存金额" rows={groupSum(filteredRows, 'warehouseType', 'amount', 10)} total={totalAmount} valueFormatter={moneyWan} />
         <BarPanel title="库龄段库存金额" rows={groupSum(filteredRows, 'ageGroup', 'amount', 10)} total={totalAmount} valueFormatter={moneyWan} />
         <BarPanel title="销售产品线库存金额" rows={groupSum(filteredRows, 'productLine', 'amount', 10)} total={totalAmount} valueFormatter={moneyWan} />
