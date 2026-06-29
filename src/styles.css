@@ -557,6 +557,7 @@ h3 {
 
 .kcfx-react-page .dashboard-grid.receipt-chart-grid.inventory-trend-three-grid {
   grid-template-columns: minmax(0, 1fr);
+  overflow-x: visible;
 }
 
 .month-calendar-filter {
@@ -1264,7 +1265,7 @@ th {
 }
 
 .kcfx-react-page .dashboard-grid.receipt-chart-grid.inventory-trend-three-grid .bar-row {
-  grid-template-columns: minmax(140px, 18%) minmax(220px, 1fr) minmax(180px, max-content);
+  grid-template-columns: minmax(140px, 18%) minmax(220px, 1fr) minmax(240px, max-content);
   column-gap: 14px;
 }
 
@@ -1282,7 +1283,7 @@ th {
 }
 
 .kcfx-react-page .dashboard-grid.receipt-chart-grid.inventory-trend-three-grid .bar-value {
-  min-width: 180px;
+  min-width: 240px;
   max-width: none;
   overflow: visible;
   color: #334155;
@@ -1294,7 +1295,7 @@ th {
 
 @media (max-width: 760px) {
   .kcfx-react-page .dashboard-grid.receipt-chart-grid.inventory-trend-three-grid .bar-row {
-    grid-template-columns: minmax(0, 1fr) minmax(180px, max-content);
+    grid-template-columns: minmax(0, 1fr) minmax(240px, max-content);
     grid-template-areas:
       "label value"
       "track track";
