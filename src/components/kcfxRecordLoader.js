@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { API } from '../constants.js';
+import { getCache, setCache } from '../indexedDbCache.js';
 
 const recordCache = new Map();
 const inflightRecordRequests = new Map();
@@ -26,6 +27,15 @@ export async function fetchKcfxRecord(id, { force = false } = {}) {
   if (!force && recordCache.has(id)) return recordCache.get(id);
   if (!force && inflightRecordRequests.has(id)) return inflightRecordRequests.get(id);
 
+  const cacheKey = `kcfx:${recordCacheVersion}:${id}`;
+  if (!force) {
+    const cached = await getCache(cacheKey);
+    if (cached) {
+      recordCache.set(id, cached);
+      return cached;
+    }
+  }
+
   const request = fetch(`${API}/api/kcfx-library/records/${encodeURIComponent(id)}`, { cache: 'no-store' })
     .then((response) => {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -34,6 +44,7 @@ export async function fetchKcfxRecord(id, { force = false } = {}) {
     .then((payload) => {
       const record = payload.record || { id, rows: [] };
       recordCache.set(record.id || id, record);
+      void setCache(cacheKey, record, 10 * 60 * 1000);
       return record;
     })
     .finally(() => {
