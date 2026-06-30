@@ -60,6 +60,7 @@ import FactLibraryPage from './components/FactLibraryPage.jsx';
 import SalesLibraryPage from './components/SalesLibraryPage.jsx';
 import FileLibraryPage from './components/FileLibraryPage.jsx';
 import { prefetchKcfxRecords } from './components/kcfxRecordLoader.js';
+import { getCache, setCache } from './indexedDbCache.js';
 import './styles.css';
 
 function App() {
@@ -416,6 +417,19 @@ function App() {
 
   async function loadData() {
     const params = user ? `?user=${encodeURIComponent(user.name)}&role=${encodeURIComponent(user.role)}` : '';
+    const cacheKey = user ? `loadData:${user.name}:${user.role}` : 'loadData';
+    try {
+      const cached = await getCache(cacheKey);
+      if (cached) {
+        if (cached.invoices) setInvoices(cached.invoices);
+        if (cached.drafts) setDrafts(cached.drafts);
+        if (cached.suppliers) setSuppliers(cached.suppliers);
+        if (cached.owners) setOwners(cached.owners);
+        if (cached.reminders) setReminders(cached.reminders);
+      }
+    } catch {
+      // 缓存读取失败不影响网络刷新
+    }
     const [invoiceRes, draftRes, supplierRes, ownerRes, reminderRes, settingsRes, usersRes, inspectionInitialRes, inspectionNoticeRes, inspectionLibraryRes, systemFilePackagesRes] = await Promise.all([
       fetch(`${API}/api/invoices${params}`),
       fetch(`${API}/api/drafts${params}`),
@@ -442,11 +456,23 @@ function App() {
       ['验货通知维度数据', inspectionLibraryRes],
       ['系统文件库', systemFilePackagesRes]
     ].forEach(([label, response]) => assertApiResponse(label, response));
-    setInvoices(await invoiceRes.json());
-    setDrafts(await draftRes.json());
-    setSuppliers(await supplierRes.json());
-    setOwners(await ownerRes.json());
-    setReminders(await reminderRes.json());
+    const invoicesData = await invoiceRes.json();
+    const draftsData = await draftRes.json();
+    const suppliersData = await supplierRes.json();
+    const ownersData = await ownerRes.json();
+    const remindersData = await reminderRes.json();
+    setInvoices(invoicesData);
+    setDrafts(draftsData);
+    setSuppliers(suppliersData);
+    setOwners(ownersData);
+    setReminders(remindersData);
+    void setCache(cacheKey, {
+      invoices: invoicesData,
+      drafts: draftsData,
+      suppliers: suppliersData,
+      owners: ownersData,
+      reminders: remindersData
+    }, 5 * 60 * 1000);
     await settingsRes.json();
     if (usersRes?.ok) {
       setManagedUsers(await usersRes.json());
