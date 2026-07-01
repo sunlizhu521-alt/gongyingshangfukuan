@@ -30,9 +30,11 @@ const RECEIPT_TABLE_COLUMNS = [
 
 export default function ReceiptSummaryPage({ user = null, kcfxData = null, kcfxRecords = {}, error = '', lastLoadedAt = '', onRefresh }) {
   const [search, setSearch] = useState('');
+  const [feedbackDrafts, setFeedbackDrafts] = useState({});
   const [summary, setSummary] = useState(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState('');
+
   const loadSummary = useCallback(async () => {
     setSummaryLoading(true);
     setSummaryError('');
@@ -73,10 +75,19 @@ export default function ReceiptSummaryPage({ user = null, kcfxData = null, kcfxR
     downloadKcfxRowsAsXlsx('关账库存分析', filteredRows, RECEIPT_TABLE_COLUMNS, '关账库存分析');
   }, [filteredRows]);
 
+  const receiptFeedbackKey = useCallback((row) => (
+    [row.materialCode, row.warehouse, row.department, row.productLine, row.productSeries].filter(Boolean).join('|')
+  ), []);
+
+  const updateReceiptFeedbackDraft = useCallback((row, value) => {
+    const key = receiptFeedbackKey(row);
+    setFeedbackDrafts((current) => ({ ...current, [key]: value }));
+  }, [receiptFeedbackKey]);
+
   const submitReceiptFeedback = useCallback(async (row) => {
-    const feedback = window.prompt('请输入这条关账库存数据的反馈内容');
-    if (!feedback || !feedback.trim()) return;
-    const rowKey = [row.materialCode, row.warehouse, row.department, row.productLine, row.productSeries].filter(Boolean).join('|');
+    const rowKey = receiptFeedbackKey(row);
+    const feedback = feedbackDrafts[rowKey] || '';
+    if (!feedback.trim()) return;
     const rowSummary = [row.materialCode, row.materialName, row.warehouse].filter(Boolean).join(' / ');
     const response = await fetch(`${API}/api/kcfx-feedback/receipt`, {
       method: 'POST',
@@ -102,21 +113,42 @@ export default function ReceiptSummaryPage({ user = null, kcfxData = null, kcfxR
       window.alert('反馈提交失败，请稍后重试');
       return;
     }
+    setFeedbackDrafts((current) => ({ ...current, [rowKey]: '' }));
     window.alert('反馈已提交');
-  }, [user?.name]);
+  }, [feedbackDrafts, receiptFeedbackKey, user?.name]);
 
   const receiptTableColumns = useMemo(() => [
     ...RECEIPT_TABLE_COLUMNS,
     {
+      key: 'feedbackText',
+      label: '问题反馈',
+      render: (row) => {
+        const key = receiptFeedbackKey(row);
+        return (
+          <input
+            className="table-input kcfx-feedback-input"
+            value={feedbackDrafts[key] || ''}
+            onChange={(event) => updateReceiptFeedbackDraft(row, event.target.value)}
+            placeholder="填写问题反馈"
+          />
+        );
+      }
+    },
+    {
       key: 'feedbackAction',
       label: '操作',
       render: (row) => (
-        <button type="button" className="ghost compact-button" onClick={() => submitReceiptFeedback(row)}>
+        <button
+          type="button"
+          className="ghost compact-button"
+          onClick={() => submitReceiptFeedback(row)}
+          disabled={!String(feedbackDrafts[receiptFeedbackKey(row)] || '').trim()}
+        >
           提交
         </button>
       )
     }
-  ], [submitReceiptFeedback]);
+  ], [feedbackDrafts, receiptFeedbackKey, submitReceiptFeedback, updateReceiptFeedbackDraft]);
 
   return (
     <KcfxPageShell title="关账库存分析" status={status} loading={summaryLoading} onRefresh={refresh}>

@@ -2215,6 +2215,10 @@ th {
   border-right: 0;
 }
 
+.kcfx-feedback-input {
+  min-width: 220px;
+}
+
 .kcfx-table-note {
   margin: 8px 0 0;
   font-size: 12px;

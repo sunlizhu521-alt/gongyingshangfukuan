@@ -28,6 +28,7 @@ const SALES_TABLE_COLUMNS = [
 
 export default function SalesAnalysisPage({ user = null, kcfxData = null, kcfxRecords = {}, error = '', lastLoadedAt = '', onRefresh }) {
   const [search, setSearch] = useState('');
+  const [feedbackDrafts, setFeedbackDrafts] = useState({});
   const salesRowsResult = useKcfxSalesRows(kcfxData);
   const shouldUseFallbackRecords = salesRowsResult.loaded && !salesRowsResult.loading && salesRowsResult.rows.length === 0;
   const fallbackRecordsResult = useKcfxRecordMap(kcfxData, shouldUseFallbackRecords ? SALES_ANALYSIS_RECORD_IDS : []);
@@ -71,10 +72,19 @@ export default function SalesAnalysisPage({ user = null, kcfxData = null, kcfxRe
     downloadKcfxRowsAsXlsx('月度销售数据', filteredRows, SALES_TABLE_COLUMNS, '月度销售数据');
   }, [filteredRows]);
 
+  const salesFeedbackKey = useCallback((row) => (
+    [row.salesMonth, row.salesOrg, row.storeShortName, row.materialCode, row.model].filter(Boolean).join('|')
+  ), []);
+
+  const updateSalesFeedbackDraft = useCallback((row, value) => {
+    const key = salesFeedbackKey(row);
+    setFeedbackDrafts((current) => ({ ...current, [key]: value }));
+  }, [salesFeedbackKey]);
+
   const submitSalesFeedback = useCallback(async (row) => {
-    const feedback = window.prompt('请输入这条月度销售数据的反馈内容');
-    if (!feedback || !feedback.trim()) return;
-    const rowKey = [row.salesMonth, row.salesOrg, row.storeShortName, row.materialCode, row.model].filter(Boolean).join('|');
+    const rowKey = salesFeedbackKey(row);
+    const feedback = feedbackDrafts[rowKey] || '';
+    if (!feedback.trim()) return;
     const rowSummary = [row.salesMonth, row.storeShortName, row.model].filter(Boolean).join(' / ');
     const response = await fetch(`${API}/api/kcfx-feedback/sales`, {
       method: 'POST',
@@ -102,21 +112,42 @@ export default function SalesAnalysisPage({ user = null, kcfxData = null, kcfxRe
       window.alert('反馈提交失败，请稍后重试');
       return;
     }
+    setFeedbackDrafts((current) => ({ ...current, [rowKey]: '' }));
     window.alert('反馈已提交');
-  }, [user?.name]);
+  }, [feedbackDrafts, salesFeedbackKey, user?.name]);
 
   const salesTableColumns = useMemo(() => [
     ...SALES_TABLE_COLUMNS,
     {
+      key: 'feedbackText',
+      label: '问题反馈',
+      render: (row) => {
+        const key = salesFeedbackKey(row);
+        return (
+          <input
+            className="table-input kcfx-feedback-input"
+            value={feedbackDrafts[key] || ''}
+            onChange={(event) => updateSalesFeedbackDraft(row, event.target.value)}
+            placeholder="填写问题反馈"
+          />
+        );
+      }
+    },
+    {
       key: 'feedbackAction',
       label: '操作',
       render: (row) => (
-        <button type="button" className="ghost compact-button" onClick={() => submitSalesFeedback(row)}>
+        <button
+          type="button"
+          className="ghost compact-button"
+          onClick={() => submitSalesFeedback(row)}
+          disabled={!String(feedbackDrafts[salesFeedbackKey(row)] || '').trim()}
+        >
           提交
         </button>
       )
     }
-  ], [submitSalesFeedback]);
+  ], [feedbackDrafts, salesFeedbackKey, submitSalesFeedback, updateSalesFeedbackDraft]);
 
   return (
     <KcfxPageShell title="月度销售数据" status={status} loading={recordsLoading} onRefresh={refresh}>
