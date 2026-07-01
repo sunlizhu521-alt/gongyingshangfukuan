@@ -23,9 +23,7 @@ const INSPECTION_NOTICE_FIELDS = [
 const INSPECTION_DEPARTMENT_OPTIONS = ['海外事业部一部', '海外事业二部', '国内事业部', '全球招商部', '其他部门'];
 const INSPECTION_LIBRARY_RECORD_IDS = ['dim-purchase-division', 'dim-product'];
 const KCFX_ERROR_RECORD_IDS = ['fact-inventory', 'fact-2', 'sales-data', 'dim-product', 'dim-warehouse', 'dim-warehouse-material', 'dim-store-name', 'dim-customer-material'];
-const KCFX_SALES_TREND_RECORD_IDS = ['sales-data', 'dim-product', 'dim-store-name', 'dim-customer-material'];
 const KCFX_PRIORITY_PRELOAD_RECORD_IDS = [
-  'sales-data',
   'fact-2',
   'dim-product',
   'dim-warehouse',
@@ -183,7 +181,6 @@ export {
   KCFX_LIBRARY_TABS,
   KCFX_PRIORITY_PRELOAD_RECORD_IDS,
   KCFX_REACT_DATA_TABS,
-  KCFX_SALES_TREND_RECORD_IDS,
   KCFX_INDEXED_DB_NAME,
   KCFX_INDEXED_DB_STORE,
   MAINTENANCE_LIBRARY_MENU_PAGES,

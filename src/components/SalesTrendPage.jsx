@@ -2,8 +2,8 @@ import React, { useMemo, useState } from 'react';
 import MultiFilter from './MultiFilter.jsx';
 import MonthCalendarFilter from './MonthCalendarFilter.jsx';
 import { BarPanel, KcfxPageShell, PanelGrid } from './KcfxCommon.jsx';
-import { KCFX_COLORS, formatNumber, formatQuantity, getCachedSalesRows, groupSum, recordSourceText, sum } from './kcfxUtils.js';
-import { useKcfxRecordMap } from './kcfxRecordLoader.js';
+import { KCFX_COLORS, formatNumber, formatQuantity, groupSum, recordSourceText, sum } from './kcfxUtils.js';
+import { useKcfxSalesRows } from './kcfxRecordLoader.js';
 
 const TREND_YEARS = ['2025', '2026'];
 const TREND_YEAR_COLORS = { 2025: '#007aff', 2026: '#34c759' };
@@ -16,17 +16,15 @@ const TREND_FILTERS = [
   { id: 'model', field: 'model', allLabel: '型号', limit: 300 }
 ];
 const EMPTY_SELECTIONS = Object.fromEntries(TREND_FILTERS.map((filter) => [filter.id, []]));
-const SALES_TREND_RECORD_IDS = ['sales-data', 'dim-product', 'dim-store-name', 'dim-customer-material'];
 
 export default function SalesTrendPage({ kcfxData = null, kcfxRecords = {}, error = '', lastLoadedAt = '', onRefresh }) {
   const [openFilter, setOpenFilter] = useState('');
   const [selections, setSelections] = useState(EMPTY_SELECTIONS);
-  const { records: loadedRecords, loading: recordsLoading, error: recordsError, reload } = useKcfxRecordMap(kcfxData, SALES_TREND_RECORD_IDS);
+  const { rows: salesRows, records: loadedRecords, loading: recordsLoading, error: recordsError, reload } = useKcfxSalesRows(kcfxData);
   const records = useMemo(() => ({ ...kcfxRecords, ...loadedRecords }), [kcfxRecords, loadedRecords]);
   const pageLoading = recordsLoading;
   const pageError = recordsError || error;
 
-  const salesRows = useMemo(() => getCachedSalesRows(records), [records]);
   const trendRows = useMemo(() => (
     salesRows
       .filter((row) => TREND_YEARS.includes(row.salesYear) && row.salesMonthNumber)

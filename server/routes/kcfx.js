@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto';
+import { getCachedSalesRows } from '../../src/components/kcfxUtils.js';
 
 const crypto = { randomUUID };
+const SALES_ROW_RECORD_IDS = ['sales-data', 'dim-product', 'dim-store-name', 'dim-customer-material'];
+let salesRowsPayloadCache = { key: '', payload: null };
 
 export default function registerKcfxRoutes(app, db) {
   const {
@@ -77,6 +80,65 @@ export default function registerKcfxRoutes(app, db) {
     scheduleKcfxTrendSummaryRefresh
   } = app.locals.gongying;
 
+async function buildSalesRowsPayload(db, { force = false } = {}) {
+  const records = {};
+  for (const id of SALES_ROW_RECORD_IDS) {
+    const source = db.kcfxLibrary.records[id] || await recoverKcfxRecordFromRowsFile(id);
+    if (!source) {
+      records[id] = { id, rows: [] };
+      continue;
+    }
+    const record = await ensureKcfxRecordRows(db, id, source);
+    records[id] = await attachKcfxRecordRows(record);
+  }
+
+  const key = [
+    db.kcfxLibrary?.savedAt || '',
+    ...SALES_ROW_RECORD_IDS.map((id) => {
+      const record = records[id] || {};
+      return `${id}:${record.rowsSavedAt || record.serverSavedAt || record.savedAt || record.appliedAt || ''}:${record.rowCount || record.rows?.length || 0}`;
+    })
+  ].join('|');
+
+  if (!force && salesRowsPayloadCache.key === key && salesRowsPayloadCache.payload) {
+    return salesRowsPayloadCache.payload;
+  }
+
+  const rows = getCachedSalesRows(records).map((row) => ({
+    salesMonth: row.salesMonth || '',
+    salesYear: row.salesYear || '',
+    salesMonthNumber: row.salesMonthNumber || '',
+    salesOrg: row.salesOrg || '',
+    customer: row.customer || '',
+    storeShortName: row.storeShortName || '',
+    salesDepartmentKey: row.salesDepartmentKey || '',
+    materialCode: row.materialCode || '',
+    materialName: row.materialName || '',
+    productLine: row.productLine || '',
+    productCategory: row.productCategory || '',
+    productSeries: row.productSeries || '',
+    model: row.model || '',
+    qty: Number(row.qty) || 0,
+    storeMatchStatus: row.storeMatchStatus || ''
+  }));
+
+  const payload = {
+    ok: true,
+    status: 'ready',
+    source: 'server-sales-rows',
+    savedAt: db.kcfxLibrary?.savedAt || '',
+    generatedAt: new Date().toISOString(),
+    rowCount: rows.length,
+    rows,
+    records: Object.fromEntries(SALES_ROW_RECORD_IDS.map((id) => {
+      const { rows: _rows, ...record } = records[id] || { id };
+      return [id, record];
+    }))
+  };
+  salesRowsPayloadCache = { key, payload };
+  return payload;
+}
+
 app.get('/api/kcfx-library', async (req, res) => {
   const db = await initDb(dataDir);
   await externalizeKcfxLibraryInlineRows(db);
@@ -149,6 +211,21 @@ app.get('/api/kcfx-library/trend-summary', async (req, res) => {
     res.status(500).json({
       ok: false,
       status: 'failed',
+      error: error?.message || String(error)
+    });
+  }
+});
+
+app.get('/api/kcfx-library/sales-rows', async (req, res) => {
+  try {
+    const db = await initDb(dataDir);
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(await buildSalesRowsPayload(db, { force: req.query.refresh === '1' }));
+  } catch (error) {
+    res.status(500).json({
+      ok: false,
+      status: 'failed',
+      source: 'server-sales-rows',
       error: error?.message || String(error)
     });
   }

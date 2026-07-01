@@ -4,6 +4,8 @@ import { getCache, setCache } from '../indexedDbCache.js';
 
 const recordCache = new Map();
 const inflightRecordRequests = new Map();
+let salesRowsPayloadCache = null;
+let inflightSalesRowsRequest = null;
 let recordCacheVersion = '';
 
 function uniqueRecordIds(ids = []) {
@@ -95,6 +97,86 @@ export function kcfxRecordsArrayToMap(records) {
     return Object.fromEntries(records.map((record) => [record.id, record]).filter(([id]) => id));
   }
   return records || {};
+}
+
+function salesRowsCacheKey(savedAt = '') {
+  return `kcfx:sales-rows:${savedAt || recordCacheVersion || 'latest'}`;
+}
+
+export async function fetchKcfxSalesRows(kcfxData, { force = false } = {}) {
+  const savedAt = kcfxData?.savedAt || recordCacheVersion || '';
+  const cacheKey = salesRowsCacheKey(savedAt);
+  if (!force && salesRowsPayloadCache?.cacheKey === cacheKey) return salesRowsPayloadCache.payload;
+  if (!force && inflightSalesRowsRequest) return inflightSalesRowsRequest;
+
+  if (!force) {
+    const cached = await getCache(cacheKey);
+    if (cached) {
+      salesRowsPayloadCache = { cacheKey, payload: cached };
+      return cached;
+    }
+  }
+
+  const request = fetch(`${API}/api/kcfx-library/sales-rows${force ? '?refresh=1' : ''}`, { cache: 'no-store' })
+    .then((response) => {
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json();
+    })
+    .then((payload) => {
+      const normalizedPayload = {
+        ...payload,
+        rows: Array.isArray(payload?.rows) ? payload.rows : [],
+        records: payload?.records || {}
+      };
+      salesRowsPayloadCache = { cacheKey, payload: normalizedPayload };
+      void setCache(cacheKey, normalizedPayload, 10 * 60 * 1000);
+      return normalizedPayload;
+    })
+    .finally(() => {
+      inflightSalesRowsRequest = null;
+    });
+
+  inflightSalesRowsRequest = request;
+  return request;
+}
+
+export function useKcfxSalesRows(kcfxData) {
+  const savedAt = kcfxData?.savedAt || '';
+  const [payload, setPayload] = useState(() => {
+    const cacheKey = salesRowsCacheKey(savedAt);
+    return salesRowsPayloadCache?.cacheKey === cacheKey ? salesRowsPayloadCache.payload : { rows: [], records: {} };
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const reload = useCallback(async ({ force = false } = {}) => {
+    setLoading(true);
+    setError('');
+    try {
+      const result = await fetchKcfxSalesRows(kcfxData, { force });
+      setPayload(result);
+      return result;
+    } catch (loadError) {
+      setError(loadError?.message || String(loadError));
+      return { rows: [], records: {} };
+    } finally {
+      setLoading(false);
+    }
+  }, [kcfxData]);
+
+  useEffect(() => {
+    syncRecordCacheVersion(savedAt);
+    reload({ force: false });
+  }, [reload, savedAt]);
+
+  return {
+    rows: Array.isArray(payload?.rows) ? payload.rows : [],
+    records: payload?.records || {},
+    loading,
+    error,
+    reload,
+    payload
+  };
 }
 
 export function useKcfxRecordMap(kcfxData, ids) {

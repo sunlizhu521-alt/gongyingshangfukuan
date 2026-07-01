@@ -9,7 +9,6 @@ import {
   KCFX_LIBRARY_TABS,
   KCFX_PRIORITY_PRELOAD_RECORD_IDS,
   KCFX_REACT_DATA_TABS,
-  KCFX_SALES_TREND_RECORD_IDS,
   MAINTENANCE_LIBRARY_PAGES,
   MAINTENANCE_LIBRARY_TABS,
   PRIORITY_KCFX_PRELOAD_TABS,
@@ -65,7 +64,7 @@ import './styles.css';
 const SALES_KCFX_TABS = new Set(['salesInventorySalesAnalysis', 'salesInventorySalesTrend']);
 
 function priorityKcfxRecordIdsForTab(tab) {
-  if (SALES_KCFX_TABS.has(tab)) return KCFX_SALES_TREND_RECORD_IDS;
+  if (SALES_KCFX_TABS.has(tab)) return [];
   return KCFX_PRIORITY_PRELOAD_RECORD_IDS.filter((id) => id !== 'sales-data');
 }
 

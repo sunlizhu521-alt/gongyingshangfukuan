@@ -1,10 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import { BarPanel, KcfxPageShell, MetricCards, PanelGrid, SimpleTable, SourcePanel } from './KcfxCommon.jsx';
 import { FilterToolbar, useDashboardFilters } from './KcfxFilters.jsx';
-import { formatNumber, getCachedSalesRows, groupSum, recordSourceText, sum, uniqueCount } from './kcfxUtils.js';
-import { useKcfxRecordMap } from './kcfxRecordLoader.js';
+import { formatNumber, groupSum, recordSourceText, sum, uniqueCount } from './kcfxUtils.js';
+import { useKcfxSalesRows } from './kcfxRecordLoader.js';
 
-const SALES_ANALYSIS_RECORD_IDS = ['sales-data', 'dim-product', 'dim-store-name', 'dim-customer-material'];
 const SALES_FILTERS = [
   { id: 'salesMonth', field: 'salesMonth', allLabel: '全部销售月份', monthAllLabel: '全部数据月份', type: 'month', sortByName: true, matchMonthNumber: true, sortValueField: 'qty' },
   { id: 'salesOrg', field: 'salesOrg', allLabel: '全部销售部门', sortValueField: 'qty' },
@@ -17,10 +16,9 @@ const SALES_SEARCH_FIELDS = ['customer', 'storeShortName', 'model', 'materialCod
 
 export default function SalesAnalysisPage({ kcfxData = null, kcfxRecords = {}, error = '', lastLoadedAt = '', onRefresh }) {
   const [search, setSearch] = useState('');
-  const { records: loadedRecords, loading: recordsLoading, error: recordsError, reload } = useKcfxRecordMap(kcfxData, SALES_ANALYSIS_RECORD_IDS);
+  const { rows, records: loadedRecords, loading: recordsLoading, error: recordsError, reload } = useKcfxSalesRows(kcfxData);
   const records = useMemo(() => ({ ...kcfxRecords, ...loadedRecords }), [kcfxRecords, loadedRecords]);
   const pageError = recordsError || error;
-  const rows = useMemo(() => getCachedSalesRows(records), [records]);
   const latestSalesMonth = useMemo(() => (
     [...new Set(rows.map((row) => row.salesMonth).filter(Boolean))].sort().at(-1) || ''
   ), [rows]);
