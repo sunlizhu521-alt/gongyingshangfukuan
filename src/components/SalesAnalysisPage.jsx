@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { BarPanel, KcfxPageShell, MetricCards, PanelGrid, SimpleTable, SourcePanel } from './KcfxCommon.jsx';
 import { FilterToolbar, useDashboardFilters } from './KcfxFilters.jsx';
-import { formatNumber, getSalesRows, groupSum, recordSourceText, sum, uniqueCount } from './kcfxUtils.js';
+import { formatNumber, getCachedSalesRows, groupSum, recordSourceText, sum, uniqueCount } from './kcfxUtils.js';
 import { useKcfxRecordMap } from './kcfxRecordLoader.js';
 
 const SALES_ANALYSIS_RECORD_IDS = ['sales-data', 'dim-product', 'dim-store-name', 'dim-customer-material'];
@@ -20,7 +20,7 @@ export default function SalesAnalysisPage({ kcfxData = null, kcfxRecords = {}, e
   const { records: loadedRecords, loading: recordsLoading, error: recordsError, reload } = useKcfxRecordMap(kcfxData, SALES_ANALYSIS_RECORD_IDS);
   const records = useMemo(() => ({ ...kcfxRecords, ...loadedRecords }), [kcfxRecords, loadedRecords]);
   const pageError = recordsError || error;
-  const rows = useMemo(() => getSalesRows(records), [records]);
+  const rows = useMemo(() => getCachedSalesRows(records), [records]);
   const latestSalesMonth = useMemo(() => (
     [...new Set(rows.map((row) => row.salesMonth).filter(Boolean))].sort().at(-1) || ''
   ), [rows]);

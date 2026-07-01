@@ -9,6 +9,7 @@ import {
   KCFX_LIBRARY_TABS,
   KCFX_PRIORITY_PRELOAD_RECORD_IDS,
   KCFX_REACT_DATA_TABS,
+  KCFX_SALES_TREND_RECORD_IDS,
   MAINTENANCE_LIBRARY_PAGES,
   MAINTENANCE_LIBRARY_TABS,
   PRIORITY_KCFX_PRELOAD_TABS,
@@ -16,7 +17,6 @@ import {
   PRODUCT_SERIES_COLUMN,
   PURCHASE_DIVISION_ADDRESS_COLUMN,
   PURCHASE_DIVISION_SUPPLIER_COLUMN,
-  SALES_INVENTORY_PAGES,
   embeddedKcfxPageMap,
   legacyPermissionMap,
   permissionGroups,
@@ -61,6 +61,13 @@ import FileLibraryPage from './components/FileLibraryPage.jsx';
 import { prefetchKcfxRecords } from './components/kcfxRecordLoader.js';
 import { getCache, setCache } from './indexedDbCache.js';
 import './styles.css';
+
+const SALES_KCFX_TABS = new Set(['salesInventorySalesAnalysis', 'salesInventorySalesTrend']);
+
+function priorityKcfxRecordIdsForTab(tab) {
+  if (SALES_KCFX_TABS.has(tab)) return KCFX_SALES_TREND_RECORD_IDS;
+  return KCFX_PRIORITY_PRELOAD_RECORD_IDS.filter((id) => id !== 'sales-data');
+}
 
 function App() {
   const [activeTab, setActiveTab] = useState('salesInventoryReceiptSummary');
@@ -108,7 +115,7 @@ function App() {
   const [kcfxLibraryMessage, setKcfxLibraryMessage] = useState('');
   const [kcfxLibraryLoadedAt, setKcfxLibraryLoadedAt] = useState('');
   const [mountedKcfxTabs, setMountedKcfxTabs] = useState(() => new Set());
-  const [mountedReactKcfxTabs, setMountedReactKcfxTabs] = useState(() => new Set(['salesInventoryReceiptSummary']));
+  const [mountedReactKcfxTabs, setMountedReactKcfxTabs] = useState(() => new Set([activeTab]));
   const [supplierImportResult, setSupplierImportResult] = useState(null);
   const [ownerImportResult, setOwnerImportResult] = useState(null);
   const [inspectionInitialData, setInspectionInitialData] = useState({ sheetName: '', columns: [], rows: [], updatedAt: '' });
@@ -222,30 +229,16 @@ function App() {
   }, [activeTab, authChecked, user]);
 
   useEffect(() => {
-    if (!authChecked || !user || !canAccessSalesInventory) return undefined;
-    const tabs = SALES_INVENTORY_PAGES
-      .map((page) => page.tab)
-      .filter((tab) => KCFX_REACT_DATA_TABS.has(tab) && canAccessTab(tab));
-    const timers = tabs.map((tab, index) => window.setTimeout(() => {
-      setMountedReactKcfxTabs((current) => (
-        current.has(tab) ? current : new Set([...current, tab])
-      ));
-    }, 120 * (index + 1)));
-    return () => {
-      timers.forEach((timer) => window.clearTimeout(timer));
-    };
-  }, [authChecked, user, canAccessSalesInventory]);
-
-  useEffect(() => {
     if (!authChecked || !user || !kcfxData || !canAccessSalesInventory) return undefined;
     const controller = new AbortController();
-    const priorityIds = KCFX_PRIORITY_PRELOAD_RECORD_IDS;
+    const priorityIds = priorityKcfxRecordIdsForTab(activeTab);
     const prioritySet = new Set(priorityIds);
     const deferredIds = KCFX_DASHBOARD_PRELOAD_RECORD_IDS.filter((id) => !prioritySet.has(id));
     async function preloadDashboardRecords() {
       try {
         await prefetchKcfxRecords(priorityIds, { batchSize: 3, delayMs: 30, signal: controller.signal });
         if (controller.signal.aborted) return;
+        if (SALES_KCFX_TABS.has(activeTab)) return;
         window.setTimeout(() => {
           prefetchKcfxRecords(deferredIds, { batchSize: 2, delayMs: 80, signal: controller.signal }).catch((error) => {
             console.warn('kcfx deferred preload failed', error);
@@ -259,7 +252,7 @@ function App() {
     return () => {
       controller.abort();
     };
-  }, [authChecked, user, kcfxData?.savedAt, canAccessSalesInventory]);
+  }, [activeTab, authChecked, user, kcfxData?.savedAt, canAccessSalesInventory]);
 
   const activeEmbeddedKcfxPage = embeddedKcfxPageMap[activeTab] && canAccessTab(activeTab)
     ? embeddedKcfxPageMap[activeTab]

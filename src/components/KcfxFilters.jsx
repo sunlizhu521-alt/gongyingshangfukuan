@@ -24,15 +24,21 @@ export function useDashboardFilters(rows, filters, { searchFields = [], searchVa
     });
   }, [defaultSelectionKey, filters]);
 
-  const normalizedSelections = useMemo(() => {
-    const optionsById = buildLinkedOptions(rows, filters, selections);
-    return Object.fromEntries(filters.map((filter) => {
-      const allowed = new Set((optionsById[filter.id] || []).map((option) => option.value));
-      return [filter.id, (selections[filter.id] || []).filter((value) => allowed.has(value))];
+  const { normalizedSelections, optionsById } = useMemo(() => {
+    const firstOptionsById = buildLinkedOptions(rows, filters, selections);
+    let changed = false;
+    const nextSelections = Object.fromEntries(filters.map((filter) => {
+      const currentValues = selections[filter.id] || [];
+      const allowed = new Set((firstOptionsById[filter.id] || []).map((option) => option.value));
+      const nextValues = currentValues.filter((value) => allowed.has(value));
+      if (nextValues.length !== currentValues.length) changed = true;
+      return [filter.id, nextValues];
     }));
+    return {
+      normalizedSelections: nextSelections,
+      optionsById: changed ? buildLinkedOptions(rows, filters, nextSelections) : firstOptionsById
+    };
   }, [filters, rows, selections]);
-
-  const optionsById = useMemo(() => buildLinkedOptions(rows, filters, normalizedSelections), [filters, normalizedSelections, rows]);
   const filteredRows = useMemo(() => {
     const query = normalizeText(searchValue).toLowerCase();
     return rows.filter((row) => {

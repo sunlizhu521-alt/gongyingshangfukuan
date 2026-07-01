@@ -173,6 +173,14 @@ export function rowsOf(record) {
   return Array.isArray(record?.rows) ? record.rows : [];
 }
 
+let salesRowsCache = {
+  salesRecord: null,
+  productRecord: null,
+  storeRecord: null,
+  departmentRecord: null,
+  rows: null
+};
+
 export function mapProducts(rows) {
   const map = new Map();
   for (const row of rows) {
@@ -433,6 +441,31 @@ export function getSalesRows(records) {
   }).filter((row) => (row.customer || row.materialCode || row.model || row.qty) && !isExcludedSalesRow(row));
 }
 
+export function getCachedSalesRows(records) {
+  const salesRecord = records['sales-data'];
+  const productRecord = records['dim-product'];
+  const storeRecord = records['dim-customer-material'];
+  const departmentRecord = records['dim-store-name'];
+  if (
+    salesRowsCache.rows
+    && salesRowsCache.salesRecord === salesRecord
+    && salesRowsCache.productRecord === productRecord
+    && salesRowsCache.storeRecord === storeRecord
+    && salesRowsCache.departmentRecord === departmentRecord
+  ) {
+    return salesRowsCache.rows;
+  }
+  const rows = getSalesRows(records);
+  salesRowsCache = {
+    salesRecord,
+    productRecord,
+    storeRecord,
+    departmentRecord,
+    rows
+  };
+  return rows;
+}
+
 function mapStoreInfo(rows) {
   const map = new Map();
   for (const row of rows) {
@@ -526,10 +559,7 @@ function isExcludedSalesRow(row) {
 }
 
 function hasInternalTransaction(row) {
-  const sourceValues = Array.isArray(row.sourceRow?.__cells)
-    ? row.sourceRow.__cells
-    : Object.entries(row.sourceRow || {}).filter(([key]) => key !== '__cells').map(([, value]) => value);
-  return [
+  const knownValues = [
     row.customer,
     row.storeShortName,
     row.salesOrg,
@@ -538,9 +568,16 @@ function hasInternalTransaction(row) {
     row.productLine,
     row.productCategory,
     row.productSeries,
-    row.model,
-    ...sourceValues
-  ].some(isInternalTransactionText);
+    row.model
+  ];
+  if (knownValues.some(isInternalTransactionText)) return true;
+  if (Array.isArray(row.sourceRow?.__cells)) {
+    return row.sourceRow.__cells.some(isInternalTransactionText);
+  }
+  for (const [key, value] of Object.entries(row.sourceRow || {})) {
+    if (key !== '__cells' && isInternalTransactionText(value)) return true;
+  }
+  return false;
 }
 
 function isInternalTransactionText(value) {

@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import MultiFilter from './MultiFilter.jsx';
 import MonthCalendarFilter from './MonthCalendarFilter.jsx';
 import { BarPanel, KcfxPageShell, PanelGrid } from './KcfxCommon.jsx';
-import { KCFX_COLORS, formatNumber, formatQuantity, getSalesRows, groupSum, recordSourceText, sum } from './kcfxUtils.js';
+import { KCFX_COLORS, formatNumber, formatQuantity, getCachedSalesRows, groupSum, recordSourceText, sum } from './kcfxUtils.js';
 import { useKcfxRecordMap } from './kcfxRecordLoader.js';
 
 const TREND_YEARS = ['2025', '2026'];
@@ -26,11 +26,10 @@ export default function SalesTrendPage({ kcfxData = null, kcfxRecords = {}, erro
   const pageLoading = recordsLoading;
   const pageError = recordsError || error;
 
-  const salesRows = useMemo(() => getSalesRows(records), [records]);
+  const salesRows = useMemo(() => getCachedSalesRows(records), [records]);
   const trendRows = useMemo(() => (
     salesRows
       .filter((row) => TREND_YEARS.includes(row.salesYear) && row.salesMonthNumber)
-      .map((row) => ({ ...row, value: Number(row.qty) || 0 }))
   ), [salesRows]);
 
   const linkedOptions = useMemo(() => (
@@ -63,15 +62,15 @@ export default function SalesTrendPage({ kcfxData = null, kcfxRecords = {}, erro
     const map = new Map();
     for (const row of filteredRows) {
       const key = `${row.salesYear}-${row.salesMonthNumber}`;
-      map.set(key, (map.get(key) || 0) + (Number(row.value) || 0));
+      map.set(key, (map.get(key) || 0) + (Number(row.qty) || 0));
     }
     return map;
   }, [filteredRows]);
 
-  const totalQty = sum(filteredRows, 'value');
+  const totalQty = sum(filteredRows, 'qty');
   const status = pageLoading
     ? '数据加载中...'
-    : pageError || `已按销售数据日期列读取 ${formatNumber(trendRows.length)} 行，年份：${TREND_YEARS.join(' / ')}，应收数量合计 ${formatQuantity(sum(trendRows, 'value'))}${lastLoadedAt ? `；读取时间：${lastLoadedAt}` : ''}`;
+    : pageError || `已按销售数据日期列读取 ${formatNumber(trendRows.length)} 行，年份：${TREND_YEARS.join(' / ')}，应收数量合计 ${formatQuantity(sum(trendRows, 'qty'))}${lastLoadedAt ? `；读取时间：${lastLoadedAt}` : ''}`;
 
   const refresh = async () => {
     await Promise.all([reload({ force: true }), onRefresh?.()]);
@@ -128,11 +127,11 @@ export default function SalesTrendPage({ kcfxData = null, kcfxRecords = {}, erro
       </section>
 
       <PanelGrid>
-        <BarPanel title="全部销售部门" rows={groupSum(filteredRows, 'salesOrg', 'value', 10)} total={totalQty} valueFormatter={(value) => formatNumber(value, 2)} />
-        <BarPanel title="店铺简称（日常汇报沟通简称）" rows={groupSum(filteredRows, 'storeShortName', 'value', 10)} total={totalQty} valueFormatter={(value) => formatNumber(value, 2)} />
-        <BarPanel title="销售产品线" rows={groupSum(filteredRows, 'productLine', 'value', 10)} total={totalQty} valueFormatter={(value) => formatNumber(value, 2)} />
-        <BarPanel title="销售系列" rows={groupSum(filteredRows, 'productSeries', 'value', 10)} total={totalQty} valueFormatter={(value) => formatNumber(value, 2)} />
-        <BarPanel title="型号" rows={groupSum(filteredRows, 'model', 'value', 10)} total={totalQty} valueFormatter={(value) => formatNumber(value, 2)} />
+        <BarPanel title="全部销售部门" rows={groupSum(filteredRows, 'salesOrg', 'qty', 10)} total={totalQty} valueFormatter={(value) => formatNumber(value, 2)} />
+        <BarPanel title="店铺简称（日常汇报沟通简称）" rows={groupSum(filteredRows, 'storeShortName', 'qty', 10)} total={totalQty} valueFormatter={(value) => formatNumber(value, 2)} />
+        <BarPanel title="销售产品线" rows={groupSum(filteredRows, 'productLine', 'qty', 10)} total={totalQty} valueFormatter={(value) => formatNumber(value, 2)} />
+        <BarPanel title="销售系列" rows={groupSum(filteredRows, 'productSeries', 'qty', 10)} total={totalQty} valueFormatter={(value) => formatNumber(value, 2)} />
+        <BarPanel title="型号" rows={groupSum(filteredRows, 'model', 'qty', 10)} total={totalQty} valueFormatter={(value) => formatNumber(value, 2)} />
       </PanelGrid>
 
       <section className="data-source-panel sales-trend-source-panel">
@@ -201,7 +200,7 @@ function linkedFilterOptions(rows, targetFilter, selections) {
     if (!rowMatchesSelections(row, selections, targetFilter.id)) continue;
     const name = String(row[targetFilter.field] || '').trim();
     if (!name) continue;
-    totals.set(name, (totals.get(name) || 0) + (Number(row.value) || 0));
+    totals.set(name, (totals.get(name) || 0) + (Number(row.qty) || 0));
   }
   return [...totals.entries()]
     .filter(([, value]) => value !== 0)
