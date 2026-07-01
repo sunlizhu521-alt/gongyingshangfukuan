@@ -1,5 +1,7 @@
 import cors from 'cors';
 import express from 'express';
+import rateLimit from 'express-rate-limit';
+import helmet from 'helmet';
 import multer from 'multer';
 import nodemailer from 'nodemailer';
 import { PDFParse } from 'pdf-parse';
@@ -47,7 +49,13 @@ const upload = multer({
   }
 });
 
-app.use(cors());
+app.use(cors({ origin: 'https://zhugeaishiyanshi.com' }));
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginResourcePolicy: false,
+  crossOriginOpenerPolicy: false
+}));
+app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 500, standardHeaders: true, legacyHeaders: false }));
 app.use(express.json({ limit: '200mb' }));
 app.use(gzipJsonResponses);
 

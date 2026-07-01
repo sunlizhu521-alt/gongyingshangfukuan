@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import rateLimit from 'express-rate-limit';
 
 const crypto = { randomUUID };
 
@@ -77,7 +78,9 @@ export default function registerAuthRoutes(app, db) {
     scheduleKcfxTrendSummaryRefresh
   } = app.locals.gongying;
 
-app.post('/api/login', async (req, res) => {
+const strictLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, message: { error: '请求过于频繁，请15分钟后再试' } });
+
+app.post('/api/login', strictLimiter, async (req, res) => {
   const db = await initDb(dataDir);
   const name = String(req.body.name || '').trim();
   const password = String(req.body.password || '');
