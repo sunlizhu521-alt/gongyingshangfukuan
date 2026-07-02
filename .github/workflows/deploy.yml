@@ -24,11 +24,11 @@ jobs:
             --exclude='node_modules' \
             --exclude='dist' \
             --exclude='data' \
-            -czf app.tar.gz .
+            -czf "$RUNNER_TEMP/gongyingaixitong-app.tar.gz" .
 
       - name: Upload package
         run: |
-          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no app.tar.gz \
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "$RUNNER_TEMP/gongyingaixitong-app.tar.gz" \
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/gongyingaixitong-app.tar.gz
 
       - name: Deploy on server
